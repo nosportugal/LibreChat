@@ -589,6 +589,7 @@ export type TStartupConfig = {
     rerankerType?: RerankerTypes;
   };
   mcpPlaceholder?: string;
+  landingExtra?: string;
 };
 
 export enum OCRStrategy {

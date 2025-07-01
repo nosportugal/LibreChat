@@ -105,6 +105,7 @@ function MCPSelect({ conversationId }: { conversationId?: string | null }) {
   }
 
   const placeholderText = startupConfig?.mcpPlaceholder || localize('com_ui_mcp_servers');
+
   return (
     <MultiSelect
       items={mcpServers ?? []}
