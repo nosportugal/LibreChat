@@ -118,15 +118,12 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     }
   }, [lineCount, description]);
 
-function parseLinks(text: string) {
+  function parseLinks(text: string) {
   const urlRegex = /(\bhttps?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
 
-  console.log('parseLinks - parts:', parts);
-
   return parts.map((part, index) => {
     if (urlRegex.test(part)) {
-      console.log('Link detectado:', part);
       return (
         <a
           key={index}
@@ -142,7 +139,6 @@ function parseLinks(text: string) {
     return <span key={index}>{part}</span>;
   });
 }
-
 
   const getDynamicMargin = useMemo(() => {
     let margin = 'mb-0';
@@ -168,13 +164,9 @@ function parseLinks(text: string) {
     typeof startupConfig?.interface?.customWelcome === 'string'
       ? getGreeting()
       : getGreeting() + (user?.name ? ', ' + user.name : '');
-  const testDescription = 'Confira o projeto em https://github.com/danny-avila/LibreChat/discussions/8156 e siga!';
+  console.log('DESCRIPTION:', description);
 
   return (
-     <div>
-    <h2>Teste parseLinks</h2>
-    <div>{parseLinks(testDescription)}</div>
-
     <div
       className={`flex h-full transform-gpu flex-col items-center justify-center pb-16 transition-all duration-200 ${centerFormOnLanding ? 'max-h-full sm:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
     >
@@ -235,12 +227,14 @@ function parseLinks(text: string) {
           )}
         </div>
         {description && (
-  <div className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary">
-    {parseLinks(description)}
-  </div>
+  <div
+    className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary"
+    dangerouslySetInnerHTML={{
+      __html: description || '',
+    }}
+  />
 )}
       </div>
-    </div>
     </div>
   );
 }
