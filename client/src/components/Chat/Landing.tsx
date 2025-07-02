@@ -8,8 +8,6 @@ import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useLocalize, useAuthContext } from '~/hooks';
 import { getIconEndpoint, getEntity } from '~/utils';
 
-
-
 const containerClassName =
   'shadow-stroke relative flex h-full items-center justify-center rounded-full bg-white dark:bg-presentation dark:text-white text-black dark:after:shadow-none ';
 
@@ -120,6 +118,32 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     }
   }, [lineCount, description]);
 
+function parseLinks(text: string) {
+  const urlRegex = /(\bhttps?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  console.log('parseLinks - parts:', parts);
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      console.log('Link detectado:', part);
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500 underline hover:text-blue-600"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
+
   const getDynamicMargin = useMemo(() => {
     let margin = 'mb-0';
 
@@ -140,20 +164,17 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     return margin;
   }, [lineCount, description, textHasMultipleLines, contentHeight]);
 
-  let customExtraContent: { text?: string; links?: { text: string; url: string }[] } = {};
-
-try {
-  customExtraContent = JSON.parse(startupConfig?.landingExtraContent|| '{}');
-} catch (e) {
-  console.error('Erro ao fazer parse de LANDING_EXTRA_CONTENT:', e);
-}
-
   const greetingText =
     typeof startupConfig?.interface?.customWelcome === 'string'
       ? getGreeting()
       : getGreeting() + (user?.name ? ', ' + user.name : '');
+  const testDescription = 'Confira o projeto em https://github.com/danny-avila/LibreChat/discussions/8156 e siga!';
 
   return (
+     <div>
+    <h2>Teste parseLinks</h2>
+    <div>{parseLinks(testDescription)}</div>
+
     <div
       className={`flex h-full transform-gpu flex-col items-center justify-center pb-16 transition-all duration-200 ${centerFormOnLanding ? 'max-h-full sm:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
     >
@@ -213,32 +234,13 @@ try {
             />
           )}
         </div>
-        {(description || customExtraContent.text ||(Array.isArray(customExtraContent.links) && customExtraContent.links.length > 0)
-) && (
-          <div className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary">
-            {customExtraContent.text && <p>{customExtraContent.text}</p>}
-            {description && !customExtraContent.text && <p>{description}</p>}
-
-            {(Array.isArray(customExtraContent.links) && customExtraContent.links.length > 0)
- && (
-              <div className="mt-4 flex flex-col items-center gap-2">
-                {customExtraContent.links.map((link, idx) => (
-                  <a
-                    key={idx}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    {link.text}
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
+        {description && (
+  <div className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary">
+    {parseLinks(description)}
+  </div>
+)}
       </div>
+    </div>
     </div>
   );
 }
