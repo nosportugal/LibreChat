@@ -142,7 +142,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     typeof startupConfig?.interface?.customWelcome === 'string'
       ? getGreeting()
       : getGreeting() + (user?.name ? ', ' + user.name : '');
-  
+
   return (
     <div
       className={`flex h-full transform-gpu flex-col items-center justify-center pb-16 transition-all duration-200 ${centerFormOnLanding ? 'max-h-full sm:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
@@ -204,14 +204,14 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
           )}
         </div>
         {description && (
-  <div
-    className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary"
-    dangerouslySetInnerHTML={{
-      __html: description || '',
-    }}
-  />
-)}
-      </div>
+          <div
+            className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary"
+            dangerouslySetInnerHTML={{
+              __html: description || '',
+            }}
+          />
+        )}
+     </div>
     </div>
   );
 }
