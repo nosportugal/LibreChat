@@ -588,7 +588,6 @@ export type TStartupConfig = {
     scraperType?: ScraperTypes;
     rerankerType?: RerankerTypes;
   };
-  mcpPlaceholder?: string;
 };
 
 export enum OCRStrategy {
