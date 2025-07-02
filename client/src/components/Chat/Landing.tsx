@@ -118,28 +118,6 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     }
   }, [lineCount, description]);
 
-  function parseLinks(text: string) {
-  const urlRegex = /(\bhttps?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500 underline hover:text-blue-600"
-        >
-          {part}
-        </a>
-      );
-    }
-    return <span key={index}>{part}</span>;
-  });
-}
-
   const getDynamicMargin = useMemo(() => {
     let margin = 'mb-0';
 
@@ -164,8 +142,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     typeof startupConfig?.interface?.customWelcome === 'string'
       ? getGreeting()
       : getGreeting() + (user?.name ? ', ' + user.name : '');
-  console.log('DESCRIPTION:', description);
-
+  
   return (
     <div
       className={`flex h-full transform-gpu flex-col items-center justify-center pb-16 transition-all duration-200 ${centerFormOnLanding ? 'max-h-full sm:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}

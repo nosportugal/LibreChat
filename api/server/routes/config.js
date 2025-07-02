@@ -96,7 +96,6 @@ router.get('/', async function (req, res) {
       bundlerURL: process.env.SANDPACK_BUNDLER_URL,
       staticBundlerURL: process.env.SANDPACK_STATIC_BUNDLER_URL,
       mcpPlaceholder: process.env.MCP_PLACEHOLDER,
-      landingExtra: process.env.LANDING_EXTRA,
     };
     /** @type {TCustomConfig['webSearch']} */
     const webSearchConfig = req.app.locals.webSearch;
