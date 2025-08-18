@@ -10,6 +10,7 @@ import {
   bookmarkPermissionsSchema,
   webSearchPermissionsSchema,
   fileSearchPermissionsSchema,
+  artifactsPermissionsSchema,
   multiConvoPermissionsSchema,
   temporaryChatPermissionsSchema,
 } from './permissions';
@@ -78,6 +79,9 @@ const defaultRolesSchema = z.object({
       [PermissionTypes.FILE_SEARCH]: fileSearchPermissionsSchema.extend({
         [Permissions.USE]: z.boolean().default(true),
       }),
+      [PermissionTypes.ARTIFACTS]: artifactsPermissionsSchema.extend({
+        [Permissions.USE]: z.boolean().default(true),
+      }),
     }),
   }),
   [SystemRoles.USER]: roleSchema.extend({
@@ -125,6 +129,9 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.FILE_SEARCH]: {
         [Permissions.USE]: true,
       },
+      [PermissionTypes.ARTIFACTS]: {
+        [Permissions.USE]: true,
+      },
     },
   },
   [SystemRoles.USER]: {
@@ -139,6 +146,7 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.RUN_CODE]: {},
       [PermissionTypes.WEB_SEARCH]: {},
       [PermissionTypes.FILE_SEARCH]: {},
+      [PermissionTypes.ARTIFACTS]: {},
     },
   },
 });

@@ -6,6 +6,10 @@ jest.mock('~/models/Role', () => ({
   updateAccessPermissions: jest.fn(),
 }));
 
+jest.mock('@librechat/api', () => ({
+  isMemoryEnabled: jest.fn(() => false),
+}));
+
 describe('loadDefaultInterface', () => {
   it('should call updateAccessPermissions with the correct parameters when permission types are true', async () => {
     const config = {
@@ -19,6 +23,7 @@ describe('loadDefaultInterface', () => {
         runCode: true,
         webSearch: true,
         fileSearch: true,
+        artifacts: true,
       },
     };
     const configDefaults = { interface: {} };
@@ -35,6 +40,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: true },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: true },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: true },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: true },
     });
   });
 
@@ -50,6 +56,7 @@ describe('loadDefaultInterface', () => {
         runCode: false,
         webSearch: false,
         fileSearch: false,
+        artifacts: false,
       },
     };
     const configDefaults = { interface: {} };
@@ -66,6 +73,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: false },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: false },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: false },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: false },
     });
   });
 
@@ -88,6 +96,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: undefined },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -103,6 +112,7 @@ describe('loadDefaultInterface', () => {
         runCode: undefined,
         webSearch: undefined,
         fileSearch: undefined,
+        artifacts: undefined,
       },
     };
     const configDefaults = { interface: {} };
@@ -122,6 +132,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: undefined },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -137,6 +148,7 @@ describe('loadDefaultInterface', () => {
         runCode: false,
         webSearch: true,
         fileSearch: false,
+        artifacts: undefined,
       },
     };
     const configDefaults = { interface: {} };
@@ -153,6 +165,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: false },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: true },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: false },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -169,6 +182,7 @@ describe('loadDefaultInterface', () => {
         runCode: true,
         webSearch: true,
         fileSearch: true,
+        artifacts: true,
       },
     };
 
@@ -184,6 +198,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: true },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: true },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: true },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: true },
     });
   });
 
@@ -206,6 +221,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: undefined },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -228,6 +244,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: undefined },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -250,6 +267,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: undefined },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -264,6 +282,7 @@ describe('loadDefaultInterface', () => {
         temporaryChat: true,
         runCode: false,
         fileSearch: true,
+        artifacts: false,
       },
     };
     const configDefaults = { interface: {} };
@@ -280,6 +299,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: false },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: true },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: false },
     });
   });
 
@@ -296,6 +316,7 @@ describe('loadDefaultInterface', () => {
         runCode: undefined,
         webSearch: undefined,
         fileSearch: true,
+        artifacts: false,
       },
     };
 
@@ -311,6 +332,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: true },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: false },
     });
   });
 
@@ -340,6 +362,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: false },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: undefined },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -363,6 +386,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: true },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -386,6 +410,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: undefined },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: undefined },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: false },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: undefined },
     });
   });
 
@@ -401,6 +426,7 @@ describe('loadDefaultInterface', () => {
         runCode: false,
         webSearch: true,
         fileSearch: true,
+        artifacts: true,
       },
     };
     const configDefaults = { interface: {} };
@@ -417,6 +443,7 @@ describe('loadDefaultInterface', () => {
       [PermissionTypes.RUN_CODE]: { [Permissions.USE]: false },
       [PermissionTypes.WEB_SEARCH]: { [Permissions.USE]: true },
       [PermissionTypes.FILE_SEARCH]: { [Permissions.USE]: true },
+      [PermissionTypes.ARTIFACTS]: { [Permissions.USE]: true },
     });
   });
 });
