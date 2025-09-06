@@ -49,6 +49,7 @@ export default function AgentConfig({ createMutation }: Pick<AgentPanelProps, 'c
     actions,
     setAction,
     agentsConfig,
+    startupConfig,
     mcpServersMap,
     setActivePanel,
     endpointsConfig,
@@ -238,16 +239,17 @@ export default function AgentConfig({ createMutation }: Pick<AgentPanelProps, 'c
             name="description"
             control={control}
             render={({ field }) => (
-              <input
+              <textarea
                 {...field}
-                value={field.value ?? ''}
-                maxLength={512}
-                className={inputClass}
+                className={`${inputClass} min-h-[100px] resize-y`}
                 id="description"
-                type="text"
                 placeholder={localize('com_agents_description_placeholder')}
                 aria-label="Agent description"
-              />
+                rows={4}
+                onChange={field.onChange}
+              >
+                {field.value ?? ''}
+              </textarea>
             )}
           />
         </div>
@@ -307,6 +309,14 @@ export default function AgentConfig({ createMutation }: Pick<AgentPanelProps, 'c
             {/* File Search */}
             {fileSearchEnabled && <FileSearch agent_id={agent_id} files={knowledge_files} />}
           </div>
+        )}
+        {/* MCP Section */}
+        {startupConfig?.mcpServers != null && (
+          <MCPTools
+            agentId={agent_id}
+            mcpServerNames={mcpServerNames}
+            setShowMCPToolDialog={setShowMCPToolDialog}
+          />
         )}
         {/* Agent Tools & Actions */}
         <div className="mb-4">
@@ -375,12 +385,6 @@ export default function AgentConfig({ createMutation }: Pick<AgentPanelProps, 'c
             </div>
           </div>
         </div>
-        {/* MCP Section */}
-        <MCPTools
-          agentId={agent_id}
-          mcpServerNames={mcpServerNames}
-          setShowMCPToolDialog={setShowMCPToolDialog}
-        />
         {/* Support Contact (Optional) */}
         <div className="mb-4">
           <div className="mb-1.5 flex items-center gap-2">
