@@ -113,11 +113,12 @@ export function convertModelInfoResponse(data: { data?: ModelInfoEntry[] }): End
 
 /**
  * Loads the proxy's CUSTOM pricing from the proxy's model-info route, using the
- * endpoint's own key. Tries `{baseURL}/model/info` then `{baseURL}/v1/model/info`
- * (proxies mount it under either, and virtual keys are often allowed only on the
- * `/v1`-prefixed route). Returns undefined when neither is available (e.g. the
- * key is restricted, 403) so the caller can fall back to the public map. Never
- * throws — a pricing fetch must not break initialization.
+ * endpoint's own key. Tries `{baseURL}/v1/model/info` first (virtual keys are
+ * commonly allowed only on the `/v1`-prefixed route), then falls back to the
+ * bare `{baseURL}/model/info`, returning on the first that works. Returns
+ * undefined when neither is available (e.g. the key is restricted, 403) so the
+ * caller can fall back to the public map. Never throws — a pricing fetch must
+ * not break initialization.
  */
 export async function fetchProxyModelInfo(
   baseURL: string,
@@ -125,12 +126,13 @@ export async function fetchProxyModelInfo(
   headers?: Record<string, string>,
 ): Promise<EndpointTokenConfig | undefined> {
   const base = baseURL.replace(/\/+$/, '');
-  // `baseURL` may already end in `/v1` (the common LiteLLM config). Build
-  // candidate URLs that cover both the bare and `/v1`-prefixed model-info routes
-  // without duplicating an existing `/v1`.
+  // `baseURL` may already end in `/v1` (the common LiteLLM config). Try the
+  // `/v1`-prefixed model-info route first (virtual keys are commonly allowed
+  // only there), then fall back to the bare route. Returns on the first that
+  // works; deduped so an existing `/v1` isn't doubled.
   const root = base.replace(/\/v1$/, '');
   const candidates = Array.from(
-    new Set([`${base}/model/info`, `${root}/model/info`, `${root}/v1/model/info`]),
+    new Set([`${root}/v1/model/info`, `${root}/model/info`]),
   );
   for (const url of candidates) {
     try {

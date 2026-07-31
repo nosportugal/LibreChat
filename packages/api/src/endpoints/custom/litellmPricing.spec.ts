@@ -116,27 +116,33 @@ describe('convertModelInfoResponse (proxy custom pricing)', () => {
 describe('fetchProxyModelInfo route candidates', () => {
   beforeEach(() => mockGet.mockReset());
 
-  it('tries both /model/info and /v1/model/info when baseURL has no /v1', async () => {
-    // First route 403s, second succeeds -> proves fallthrough to /v1/model/info
+  it('tries /v1/model/info first and stops on success (bare route not called)', async () => {
+    mockGet.mockResolvedValueOnce({ data: okData });
+    const out = await fetchProxyModelInfo('https://litellm.example.com', 'sk-key');
+    expect(out?.['gpt-5-nano']).toBeDefined();
+    const urls = mockGet.mock.calls.map((c) => c[0]);
+    expect(urls[0]).toBe('https://litellm.example.com/v1/model/info');
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to bare /model/info when /v1 fails', async () => {
     mockGet
-      .mockRejectedValueOnce(new Error('403'))
+      .mockRejectedValueOnce(new Error('404'))
       .mockResolvedValueOnce({ data: okData });
     const out = await fetchProxyModelInfo('https://litellm.example.com', 'sk-key');
     expect(out?.['gpt-5-nano']).toBeDefined();
     const urls = mockGet.mock.calls.map((c) => c[0]);
-    expect(urls).toContain('https://litellm.example.com/model/info');
-    expect(urls).toContain('https://litellm.example.com/v1/model/info');
+    expect(urls).toEqual([
+      'https://litellm.example.com/v1/model/info',
+      'https://litellm.example.com/model/info',
+    ]);
   });
 
-  it('tries both routes when baseURL already ends in /v1 (no duplicate /v1/v1)', async () => {
-    mockGet
-      .mockRejectedValueOnce(new Error('403'))
-      .mockResolvedValueOnce({ data: okData });
-    const out = await fetchProxyModelInfo('https://litellm.example.com/v1', 'sk-key');
-    expect(out?.['gpt-5-nano']).toBeDefined();
+  it('does not duplicate /v1 when baseURL already ends in /v1', async () => {
+    mockGet.mockResolvedValueOnce({ data: okData });
+    await fetchProxyModelInfo('https://litellm.example.com/v1', 'sk-key');
     const urls = mockGet.mock.calls.map((c) => c[0]);
-    expect(urls).toContain('https://litellm.example.com/v1/model/info');
-    expect(urls).toContain('https://litellm.example.com/model/info');
+    expect(urls[0]).toBe('https://litellm.example.com/v1/model/info');
     expect(urls.some((u: string) => u.includes('/v1/v1/'))).toBe(false);
   });
 
