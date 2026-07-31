@@ -25,6 +25,7 @@ import {
   prepareStructuredTokenSpend,
   bulkWriteTransactions,
   prepareTokenSpend,
+  prepareCostSpend,
 } from './transactions';
 
 type SpendTokensFn = (txData: TxMetadata, tokenUsage: TokenUsage) => Promise<unknown>;
@@ -605,6 +606,29 @@ export async function recordCollectedUsage(
          *  when present, bills directly instead of token*multiplier. */
         costUSD: usage.costUSD,
       };
+
+      /** Accurate billing: an opt-in endpoint supplied the provider's exact cost
+       *  for this call. Emit ONE direct-value transaction (tokenValue from cost,
+       *  token counts kept for display) and skip token*multiplier entirely. */
+      if (txMetadata.costUSD != null && bulkWriteOps) {
+        const entry = prepareCostSpend(txMetadata as TxMetadata & { costUSD: number }, {
+          promptTokens: inputOnly + cacheCreation + cacheRead,
+          completionTokens: completion,
+        });
+        if (entry) {
+          if (useBulk) {
+            docs.push(entry);
+          } else {
+            bulkWriteTransactions({ user, docs: [entry] }, bulkWriteOps).catch((err) => {
+              logger.error(
+                `[packages/api #recordCollectedUsage] Error spending ${usageContext} response cost`,
+                err,
+              );
+            });
+          }
+          continue;
+        }
+      }
 
       if (useBulk) {
         const entries =

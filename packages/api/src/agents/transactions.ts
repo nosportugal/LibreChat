@@ -336,6 +336,44 @@ export function prepareStructuredTokenSpend(
   return results;
 }
 
+/** USD -> tokenCredits scaling: multipliers are USD per 1M tokens, so 1 credit
+ *  equals 1e-6 USD (1 USD = 1,000,000 tokenCredits). */
+const USD_TO_CREDITS = 1_000_000;
+
+/**
+ * Builds a single direct-cost transaction from a provider-reported USD amount
+ * (e.g. LiteLLM's response-cost header), bypassing the token*multiplier
+ * calculation. Token counts are preserved on the doc for display/analytics; only
+ * the debited `tokenValue` comes from the cost.
+ */
+export function prepareCostSpend(
+  txData: TxMetadata & { costUSD: number },
+  tokenUsage: TokenUsage,
+): PreparedEntry | null {
+  const { balance, transactions, costUSD, ...rest } = txData;
+  if (transactions?.enabled === false) {
+    return null;
+  }
+  if (!Number.isFinite(costUSD) || costUSD < 0) {
+    return null;
+  }
+  const tokenValue = -(costUSD * USD_TO_CREDITS);
+  const promptTokens = Math.max(tokenUsage.promptTokens ?? 0, 0);
+  const completionTokens = Math.max(tokenUsage.completionTokens ?? 0, 0);
+  return {
+    doc: {
+      ...rest,
+      tokenType: 'completion',
+      rawAmount: -completionTokens,
+      inputTokens: promptTokens,
+      tokenValue,
+      rate: 0,
+    } as PreparedEntry['doc'],
+    tokenValue,
+    balance,
+  };
+}
+
 export async function bulkWriteTransactions(
   { user, docs }: { user: string; docs: PreparedEntry[] },
   dbOps: BulkWriteDeps,
