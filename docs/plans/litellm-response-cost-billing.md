@@ -1,5 +1,8 @@
 # Implementation Plan: Accurate LiteLLM Billing via `x-litellm-response-cost`
 
+> **Status: IMPLEMENTED.** See the "Usage" and "Implementation notes" sections
+> at the bottom for the shipped behavior.
+
 ## Objective
 
 For custom endpoints explicitly opted-in, debit user credits from LiteLLM's own
@@ -242,3 +245,44 @@ debit.
 The fetch → billing correlation (Step 0). The capturing fetch runs beneath
 langchain, so the captured USD must be matched to the right usage record before
 `processUsageGroup` debits, safely under concurrency. Prove this first.
+
+---
+
+## Usage (shipped)
+
+Add `useResponseCost: true` to a custom endpoint in `librechat.yaml`:
+
+```yaml
+endpoints:
+  custom:
+    - name: "LiteLLM"
+      apiKey: "sk-from-config-file"
+      baseURL: "http://litellm:4000/v1"
+      useResponseCost: true          # bill from x-litellm-response-cost
+      models:
+        default: ["gpt-4o"]
+        fetch: true
+```
+
+Behavior:
+- When the LiteLLM proxy returns `x-litellm-response-cost` on a response, the
+  user is debited that exact USD amount (converted at 1 USD = 1,000,000
+  tokenCredits). This reflects real per-route / fallback / tiered cost.
+- When the header is absent/invalid on a response, billing falls back to the
+  existing `token × multiplier` estimate. It never debits zero silently.
+- `useResponseCost` off (default) → header is ignored entirely.
+- The pre-request balance gate (`checkBalance`) still uses the multiplier
+  estimate; the accurate cost is reconciled on the post-response debit.
+
+## Implementation notes (shipped)
+
+- Correlation uses a request-scoped `ResponseCostCollector` held in an
+  `AsyncLocalStorage` (`responseCostStorage`), seeded in `AgentController`.
+  The capturing `fetch` (installed by `getOpenAIConfig` when opted-in) records
+  cost keyed by completion id; `ModelEndHandler` consumes it by id
+  (consume-on-read prevents double-billing) and sets `usage.costUSD`.
+- `costUSD` flows `UsageMetadata → TxMetadata → prepareCostSpend`, which emits a
+  single direct-value transaction (`tokenValue = -(costUSD × 1e6)`), keeping
+  token counts for display.
+- Tests: `responseCost.spec.ts`, `generators.spec.ts`, `prepareCostSpend.spec.ts`,
+  plus `useResponseCost` cases in `config-schemas.spec.ts`.
