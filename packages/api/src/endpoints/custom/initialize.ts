@@ -21,7 +21,7 @@ import { getOpenAIConfig } from '~/endpoints/openai/config';
 import { getScopedTokenConfigKey } from '~/endpoints/keys';
 import { getCustomEndpointConfig } from '~/app/config';
 import { fetchModels } from '~/endpoints/models';
-import { fetchLiteLLMPriceMap } from '~/endpoints/custom/litellmPricing';
+import { resolveLiteLLMPricing } from '~/endpoints/custom/litellmPricing';
 import { validateEndpointURL } from '~/auth';
 import { tokenConfigCache } from '~/cache';
 
@@ -275,15 +275,21 @@ export async function initializeCustom({
 
   /** Streaming-standard billing for opt-in endpoints (e.g. LiteLLM): the exact
    *  response-cost header is only emitted on non-streaming responses, so for the
-   *  default streaming path we price the real token counts using LiteLLM's own
-   *  public price map — no per-model `tokenConfig` required. A static
-   *  `tokenConfig` still wins (authoritative), and the response-cost header still
-   *  overrides per non-streaming call. */
-  if (endpointTokenConfig == null && endpointConfig.useResponseCost === true) {
-    const priceKey = 'litellm:price-map';
+   *  default streaming path we price the real token counts using the proxy's own
+   *  prices — no per-model `tokenConfig` required. Source order: the proxy's
+   *  `/model/info` (CUSTOM pricing: margins/overrides), else LiteLLM's public
+   *  price map. A static `tokenConfig` still wins (authoritative), and the
+   *  response-cost header still overrides per non-streaming call. Cached
+   *  per-endpoint since custom prices differ by proxy. */
+  if (endpointTokenConfig == null && endpointConfig.useResponseCost === true && apiKey) {
+    const priceKey = `litellm:price-map:${endpoint}`;
     let priceMap = (await cache.get(priceKey)) as EndpointTokenConfig | undefined;
     if (priceMap == null) {
-      priceMap = await fetchLiteLLMPriceMap();
+      priceMap = await resolveLiteLLMPricing(
+        baseURL,
+        apiKey,
+        userProvidesURL ? undefined : endpointConfig.headers,
+      );
       if (priceMap != null) {
         await cache.set(priceKey, priceMap);
       }

@@ -2,7 +2,7 @@ jest.mock('@librechat/data-schemas', () => ({
   logger: { debug: jest.fn(), warn: jest.fn() },
 }));
 
-import { convertLiteLLMPriceMap } from './litellmPricing';
+import { convertLiteLLMPriceMap, convertModelInfoResponse } from './litellmPricing';
 
 describe('convertLiteLLMPriceMap', () => {
   it('converts per-token costs to per-1M rates', () => {
@@ -52,5 +52,52 @@ describe('convertLiteLLMPriceMap', () => {
       'input-only': { input_cost_per_token: 1e-6 },
     });
     expect(out['input-only']).toEqual({ prompt: 1, completion: 0, context: 0 });
+  });
+});
+
+describe('convertModelInfoResponse (proxy custom pricing)', () => {
+  it('keys per-1M config by model_name from model_info', () => {
+    const out = convertModelInfoResponse({
+      data: [
+        {
+          model_name: 'gpt-5-nano',
+          model_info: {
+            input_cost_per_token: 5e-8,
+            output_cost_per_token: 4e-7,
+            max_input_tokens: 272000,
+          },
+        },
+      ],
+    });
+    expect(out['gpt-5-nano'].prompt).toBeCloseTo(0.05);
+    expect(out['gpt-5-nano'].completion).toBeCloseTo(0.4);
+    expect(out['gpt-5-nano'].context).toBe(272000);
+  });
+
+  it('reflects custom (overridden) prices as-is', () => {
+    // a proxy margin/override: higher than upstream
+    const out = convertModelInfoResponse({
+      data: [
+        { model_name: 'gpt-5-nano', model_info: { input_cost_per_token: 1e-6, output_cost_per_token: 5e-6 } },
+      ],
+    });
+    expect(out['gpt-5-nano'].prompt).toBeCloseTo(1);
+    expect(out['gpt-5-nano'].completion).toBeCloseTo(5);
+  });
+
+  it('skips entries without a name or usable price', () => {
+    const out = convertModelInfoResponse({
+      data: [
+        { model_info: { input_cost_per_token: 1e-6 } },
+        { model_name: 'no-price', model_info: { max_tokens: 1000 } },
+        { model_name: 'ok', model_info: { input_cost_per_token: 1e-6, output_cost_per_token: 2e-6 } },
+      ],
+    });
+    expect(Object.keys(out)).toEqual(['ok']);
+  });
+
+  it('handles empty/missing data', () => {
+    expect(convertModelInfoResponse({})).toEqual({});
+    expect(convertModelInfoResponse({ data: [] })).toEqual({});
   });
 });

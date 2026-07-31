@@ -299,15 +299,22 @@ streaming because it only needs token counts, which LibreChat always has in
 
 **Recommended hybrid for LiteLLM (this is what the shipped code already does):**
 
-- **Streaming (default, standard, no config)**: token counts × LiteLLM's own
-  public price map, loaded automatically. When `useResponseCost` is set and no
-  static `tokenConfig` is configured, `initializeCustom` fetches LiteLLM's
-  `model_prices_and_context_window.json` (overridable via
-  `LITELLM_PRICE_MAP_URL`), converts per-token → per-1M into `endpointTokenConfig`,
-  and caches it. Streamed token counts (always present in `usage_metadata`) are
-  then priced through the same `getMultiplier` path OpenRouter uses.
-  **Live-verified: the map estimate equals LiteLLM's own cost to 8 decimals for
-  the same token counts** (`$0.00005845 == $0.00005845`).
+- **Streaming (default, standard, no config)**: token counts × the proxy's own
+  prices, loaded automatically. When `useResponseCost` is set and no static
+  `tokenConfig` is configured, `initializeCustom` resolves prices in this order
+  and caches per-endpoint:
+  1. **The proxy's `/model/info`** — the proxy's authoritative CUSTOM pricing
+     (margins, overrides, per-deployment rates), fetched with the endpoint's own
+     key. Used whenever the key is allowed on that route.
+  2. **LiteLLM's public `model_prices_and_context_window.json`** — default
+     upstream rates, only when `/model/info` is unavailable (e.g. the key is
+     restricted to `llm_api_routes`, 403). Override via `LITELLM_PRICE_MAP_URL`.
+
+  Converted per-token → per-1M into `endpointTokenConfig` and priced through the
+  same `getMultiplier` path OpenRouter uses. **Live-verified: the public-map
+  estimate equals LiteLLM's own cost to 8 decimals for the same token counts**
+  (`$0.00005845 == $0.00005845`); a key with `/model/info` access gets the exact
+  custom prices instead.
 - **Non-streaming**: the exact `x-litellm-response-cost` header overrides the
   estimate (redundant on models in the map — same rates — but authoritative for
   models the map lacks or custom per-route pricing).
