@@ -16,7 +16,7 @@ import type {
 } from '~/types';
 import { getLLMConfig as getAnthropicLLMConfig } from '~/endpoints/anthropic/llm';
 import { extractDefaultParams } from '~/endpoints/openai/llm';
-import { isUserProvided, checkUserKeyExpiry } from '~/utils';
+import { isUserProvided, checkUserKeyExpiry, getResponseCostCollector } from '~/utils';
 import { getOpenAIConfig } from '~/endpoints/openai/config';
 import { getScopedTokenConfigKey } from '~/endpoints/keys';
 import { getCustomEndpointConfig } from '~/app/config';
@@ -336,6 +336,12 @@ export async function initializeCustom({
     const finalClientOptions = {
       modelOptions,
       ...clientOptions,
+      /** Opt-in accurate billing: when the endpoint trusts the provider's
+       *  response-cost header, install the capturing fetch and wire it to the
+       *  ambient request-scoped collector (seeded by the agent controller). */
+      useResponseCost: endpointConfig.useResponseCost === true,
+      costCollector:
+        endpointConfig.useResponseCost === true ? getResponseCostCollector() : undefined,
     };
     options = getOpenAIConfig(apiKey, finalClientOptions, endpoint);
     if (options != null) {

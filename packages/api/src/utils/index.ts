@@ -21,6 +21,7 @@ export * from './openid';
 export * from './promise';
 export * from './proxy';
 export * from './ports';
+export * from './responseCost';
 export * from './sanitizeTitle';
 export * from './text';
 export * from './yaml';

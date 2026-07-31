@@ -104,6 +104,8 @@ export function getOpenAIConfig(
     streaming = true,
     modelOptions = {},
     reverseProxyUrl: baseURL,
+    useResponseCost,
+    costCollector,
   } = options;
   const shouldProtectUserBaseURL = options.baseURLIsUserProvided === true && !!baseURL;
   const ssrfAgents = shouldProtectUserBaseURL
@@ -294,12 +296,17 @@ export function getOpenAIConfig(
     configOptions.organization = process.env.OPENAI_ORGANIZATION;
   }
 
-  if (directEndpoint === true && configOptions?.baseURL != null) {
+  const shouldCaptureCost = useResponseCost === true && costCollector != null;
+  if (
+    (directEndpoint === true || shouldCaptureCost) &&
+    configOptions?.baseURL != null
+  ) {
     configOptions.fetch = createFetch({
-      directEndpoint: directEndpoint,
+      directEndpoint: directEndpoint === true,
       reverseProxyUrl: configOptions?.baseURL,
       ssrfAgents,
       redirect: shouldProtectUserBaseURL ? 'error' : undefined,
+      costCollector: shouldCaptureCost ? costCollector : undefined,
     }) as unknown as Fetch;
   }
 

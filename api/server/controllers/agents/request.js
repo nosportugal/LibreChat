@@ -16,6 +16,8 @@ const {
   resolveConversationAnchor,
   getAgentStartupTelemetry,
   acceptAgentStartupTelemetry,
+  ResponseCostCollector,
+  runWithResponseCostCollector,
 } = require('@librechat/api');
 const { disposeClient, clientRegistry, requestDataMap } = require('~/server/cleanup');
 const {
@@ -1187,7 +1189,13 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
  * The legacy non-resumable path is kept below but no longer used by default.
  */
 const AgentController = async (req, res, next, initializeClient, addTitle) => {
-  return ResumableAgentController(req, res, next, initializeClient, addTitle);
+  // Seed a request-scoped response-cost collector so opt-in endpoints
+  // (useResponseCost, e.g. LiteLLM) can capture the provider's response-cost
+  // header in the fetch layer and read it back at the billing choke point.
+  const collector = new ResponseCostCollector();
+  return runWithResponseCostCollector(collector, () =>
+    ResumableAgentController(req, res, next, initializeClient, addTitle),
+  );
 };
 
 /**

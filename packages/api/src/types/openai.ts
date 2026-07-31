@@ -4,6 +4,7 @@ import type { BindToolsInput } from '@librechat/agents/langchain/language_models
 import type { OpenAIClientOptions, Providers } from '@librechat/agents';
 import type { TConfig } from 'librechat-data-provider';
 import type { AzureOptions } from './azure';
+import type { ResponseCostCollector } from '~/utils/responseCost';
 
 export type OpenAIParameters = z.infer<typeof openAISchema>;
 
@@ -26,6 +27,14 @@ export interface OpenAIConfigOptions {
   addParams?: Record<string, unknown>;
   dropParams?: string[];
   customParams?: Partial<TConfig['customParams']>;
+  /**
+   * Opts this endpoint into trusting the provider response-cost header
+   * (`x-litellm-response-cost`) for billing. When set with `costCollector`,
+   * `getOpenAIConfig` installs a capturing fetch.
+   */
+  useResponseCost?: boolean;
+  /** Request-scoped collector the capturing fetch records response costs into. */
+  costCollector?: ResponseCostCollector;
 }
 
 export type OpenAIConfiguration = OpenAIClientOptions['configuration'];

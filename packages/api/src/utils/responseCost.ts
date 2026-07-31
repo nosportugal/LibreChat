@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /**
  * Request-scoped collector for provider-reported response costs (e.g. LiteLLM's
  * `x-litellm-response-cost` header). One instance is created per request/run and
@@ -71,4 +73,32 @@ export function extractCompletionId(text: string | null | undefined): string | u
   // Non-streaming JSON body: {"id":"chatcmpl-...", ...}
   const match = text.match(/"id"\s*:\s*"([^"]+)"/);
   return match?.[1];
+}
+
+/**
+ * Request-scoped AsyncLocalStorage holding the active response-cost collector.
+ *
+ * The capturing `fetch` (below the langchain/SDK layer) writes captured costs
+ * into this store; `ModelEndHandler` (the billing choke point) reads from it and
+ * correlates by completion id — without threading a live object through
+ * `@librechat/agents`. Mirrors the repo's existing `tenantStorage` ALS pattern.
+ */
+export const responseCostStorage: AsyncLocalStorage<ResponseCostCollector> =
+  new AsyncLocalStorage<ResponseCostCollector>();
+
+/**
+ * Runs `fn` within a fresh response-cost collector context. Establish this once
+ * per generation (around client init + `sendMessage`) so both the fetch and the
+ * end-of-model callback observe the same collector.
+ */
+export function runWithResponseCostCollector<T>(
+  collector: ResponseCostCollector,
+  fn: () => T,
+): T {
+  return responseCostStorage.run(collector, fn);
+}
+
+/** Returns the ambient request-scoped collector, if a context is active. */
+export function getResponseCostCollector(): ResponseCostCollector | undefined {
+  return responseCostStorage.getStore();
 }

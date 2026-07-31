@@ -2,6 +2,8 @@ import {
   ResponseCostCollector,
   parseResponseCostHeader,
   extractCompletionId,
+  runWithResponseCostCollector,
+  getResponseCostCollector,
 } from './responseCost';
 
 describe('parseResponseCostHeader', () => {
@@ -70,5 +72,40 @@ describe('ResponseCostCollector', () => {
     c.record(0.01, 'known');
     expect(c.getById('unknown')).toBeUndefined();
     expect(c.getById(undefined)).toBeUndefined();
+  });
+});
+
+describe('responseCostStorage ALS', () => {
+  it('exposes the collector to the ambient context', () => {
+    const c = new ResponseCostCollector();
+    expect(getResponseCostCollector()).toBeUndefined();
+    runWithResponseCostCollector(c, () => {
+      expect(getResponseCostCollector()).toBe(c);
+    });
+    expect(getResponseCostCollector()).toBeUndefined();
+  });
+
+  it('propagates across async boundaries within the run', async () => {
+    const c = new ResponseCostCollector();
+    await runWithResponseCostCollector(c, async () => {
+      await Promise.resolve();
+      c.record(0.02, 'chatcmpl-async');
+      expect(getResponseCostCollector()?.getById('chatcmpl-async')).toBe(0.02);
+    });
+  });
+
+  it('isolates concurrent contexts', async () => {
+    const a = new ResponseCostCollector();
+    const b = new ResponseCostCollector();
+    await Promise.all([
+      runWithResponseCostCollector(a, async () => {
+        await Promise.resolve();
+        expect(getResponseCostCollector()).toBe(a);
+      }),
+      runWithResponseCostCollector(b, async () => {
+        await Promise.resolve();
+        expect(getResponseCostCollector()).toBe(b);
+      }),
+    ]);
   });
 });
