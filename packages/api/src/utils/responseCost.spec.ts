@@ -55,14 +55,12 @@ describe('ResponseCostCollector', () => {
     c.record('chatcmpl-2', { costUSD: 0.0034 });
     expect(c.getById('chatcmpl-1')?.costUSD).toBe(0.0012);
     expect(c.getById('chatcmpl-2')?.costUSD).toBe(0.0034);
-    expect(c.size).toBe(2);
   });
 
   it('records a routed model id (streaming, no cost)', () => {
     const c = new ResponseCostCollector();
     c.record('chatcmpl-1', { modelId: 'deploy-abc' });
     expect(c.getById('chatcmpl-1')).toEqual({ modelId: 'deploy-abc' });
-    expect(c.size).toBe(1);
   });
 
   it('merges cost and modelId recorded for the same id', () => {
@@ -80,7 +78,6 @@ describe('ResponseCostCollector', () => {
     expect(c.getById('a')).toBeUndefined();
     expect(c.getById('b')).toBeUndefined();
     expect(c.getById('c')).toEqual({ modelId: 'm' });
-    expect(c.size).toBe(1);
   });
 
   it('returns undefined for unknown id', () => {

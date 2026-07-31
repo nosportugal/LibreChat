@@ -26,7 +26,6 @@ export interface ResponseCostEntry {
 
 export class ResponseCostCollector {
   private byId = new Map<string, ResponseCostEntry>();
-  private count = 0;
 
   /**
    * Records the provider signals for a completion: the exact USD cost (present
@@ -44,7 +43,6 @@ export class ResponseCostCollector {
     if (clean.costUSD == null && clean.modelId == null) {
       return;
     }
-    this.count++;
     if (id) {
       this.byId.set(id, { ...this.byId.get(id), ...clean });
     }
@@ -63,16 +61,12 @@ export class ResponseCostCollector {
    * so the same cost can never be billed twice (e.g. on a retried callback).
    */
   consumeById(id?: string): ResponseCostEntry | undefined {
-    if (id != null && this.byId.has(id)) {
-      const entry = this.byId.get(id);
-      this.byId.delete(id);
-      return entry;
+    if (id == null) {
+      return undefined;
     }
-    return undefined;
-  }
-
-  get size(): number {
-    return this.count;
+    const entry = this.byId.get(id);
+    this.byId.delete(id);
+    return entry;
   }
 }
 
