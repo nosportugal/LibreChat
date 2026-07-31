@@ -11,15 +11,25 @@ const maybe = KEY ? describe : describe.skip;
 maybe('LiteLLM proxy pricing source (live)', () => {
   jest.setTimeout(60000);
 
-  it('returns undefined when /model/info is forbidden for the key', async () => {
+  it('loads CUSTOM prices from the proxy /v1/model/info', async () => {
     const out = await fetchProxyModelInfo(BASE, KEY!);
-    // This key is restricted to llm_api_routes -> /model/info is 403
-    expect(out).toBeUndefined();
+    expect(out).toBeDefined();
+    // Custom-priced models present on the proxy but not in the public map
+    expect(out!['gpt-5.6-luna']?.completion).toBeGreaterThan(0);
+    expect(out!['gpt-5-nano']?.prompt).toBeGreaterThan(0);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[live] proxy custom prices: ${Object.keys(out!).length} models; ` +
+        `gpt-5.6-luna in=${out!['gpt-5.6-luna']?.prompt}/1M out=${out!['gpt-5.6-luna']?.completion}/1M`,
+    );
   });
 
-  it('resolveLiteLLMPricing falls back to the public map and covers gpt-5-nano', async () => {
+  it('resolveLiteLLMPricing prefers proxy custom pricing over the public map', async () => {
     const out = await resolveLiteLLMPricing(BASE, KEY!);
     expect(out).toBeDefined();
-    expect(out!['gpt-5-nano']?.prompt).toBeGreaterThan(0);
+    // gpt-5.6-luna custom price on this proxy is $1/1M in, $6/1M out —
+    // distinct from the public map's default rates.
+    expect(out!['gpt-5.6-luna']?.prompt).toBeCloseTo(1);
+    expect(out!['gpt-5.6-luna']?.completion).toBeCloseTo(6);
   });
 });

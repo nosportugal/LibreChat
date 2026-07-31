@@ -101,10 +101,12 @@ export function convertModelInfoResponse(data: { data?: ModelInfoEntry[] }): End
 }
 
 /**
- * Loads the proxy's CUSTOM pricing from `{baseURL}/model/info`, using the
- * endpoint's own key. Returns undefined when the route is unavailable (e.g. the
- * key is restricted to `llm_api_routes`, 403) so the caller can fall back to the
- * public map. Never throws — a pricing fetch must not break initialization.
+ * Loads the proxy's CUSTOM pricing from the proxy's model-info route, using the
+ * endpoint's own key. Tries `{baseURL}/model/info` then `{baseURL}/v1/model/info`
+ * (proxies mount it under either, and virtual keys are often allowed only on the
+ * `/v1`-prefixed route). Returns undefined when neither is available (e.g. the
+ * key is restricted, 403) so the caller can fall back to the public map. Never
+ * throws — a pricing fetch must not break initialization.
  */
 export async function fetchProxyModelInfo(
   baseURL: string,
@@ -112,26 +114,35 @@ export async function fetchProxyModelInfo(
   headers?: Record<string, string>,
 ): Promise<EndpointTokenConfig | undefined> {
   const base = baseURL.replace(/\/+$/, '');
-  try {
-    const res = await axios.get(`${base}/model/info`, {
-      timeout: 10000,
-      headers: { Authorization: `Bearer ${apiKey}`, ...headers },
-    });
-    const config = convertModelInfoResponse(res.data);
-    if (Object.keys(config).length === 0) {
-      return undefined;
+  // `baseURL` may already end in `/v1` (the common LiteLLM config). Build
+  // candidate URLs that cover both the bare and `/v1`-prefixed model-info routes
+  // without duplicating an existing `/v1`.
+  const root = base.replace(/\/v1$/, '');
+  const candidates = Array.from(
+    new Set([`${base}/model/info`, `${root}/model/info`, `${root}/v1/model/info`]),
+  );
+  for (const url of candidates) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 10000,
+        headers: { Authorization: `Bearer ${apiKey}`, ...headers },
+      });
+      const config = convertModelInfoResponse(res.data);
+      if (Object.keys(config).length === 0) {
+        continue;
+      }
+      logger.debug(
+        `[litellmPricing] Loaded ${Object.keys(config).length} custom prices from ${url}`,
+      );
+      return config;
+    } catch {
+      // Try the next candidate route.
     }
-    logger.debug(
-      `[litellmPricing] Loaded ${Object.keys(config).length} custom prices from ${base}/model/info`,
-    );
-    return config;
-  } catch (err) {
-    logger.debug(
-      `[litellmPricing] /model/info unavailable at ${base} (falling back to public map)`,
-      err,
-    );
-    return undefined;
   }
+  logger.debug(
+    `[litellmPricing] No accessible /model/info at ${base} (falling back to public map)`,
+  );
+  return undefined;
 }
 
 let inflight: Promise<EndpointTokenConfig | undefined> | undefined;
