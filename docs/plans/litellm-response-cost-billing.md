@@ -258,7 +258,7 @@ endpoints:
     - name: "LiteLLM"
       apiKey: "sk-from-config-file"
       baseURL: "http://litellm:4000/v1"
-      useResponseCost: true          # bill from x-litellm-response-cost
+      useResponseCost: true          # accurate billing, streaming + non-streaming
       models:
         default: ["gpt-4o"]
         fetch: true
@@ -299,19 +299,24 @@ streaming because it only needs token counts, which LibreChat always has in
 
 **Recommended hybrid for LiteLLM (this is what the shipped code already does):**
 
-- **Streaming**: token counts × a **static `tokenConfig`** price map in
-  `librechat.yaml`. A static `tokenConfig` becomes the same `endpointTokenConfig`
-  OpenRouter's fetch produces (`initialize.ts:265`) and flows through the
-  identical `getMultiplier` path — so streaming is priced exactly like
-  OpenRouter, with zero new billing code.
+- **Streaming (default, standard, no config)**: token counts × LiteLLM's own
+  public price map, loaded automatically. When `useResponseCost` is set and no
+  static `tokenConfig` is configured, `initializeCustom` fetches LiteLLM's
+  `model_prices_and_context_window.json` (overridable via
+  `LITELLM_PRICE_MAP_URL`), converts per-token → per-1M into `endpointTokenConfig`,
+  and caches it. Streamed token counts (always present in `usage_metadata`) are
+  then priced through the same `getMultiplier` path OpenRouter uses.
+  **Live-verified: the map estimate equals LiteLLM's own cost to 8 decimals for
+  the same token counts** (`$0.00005845 == $0.00005845`).
 - **Non-streaming**: the exact `x-litellm-response-cost` header overrides the
-  estimate (accuracy bonus where available).
+  estimate (redundant on models in the map — same rates — but authoritative for
+  models the map lacks or custom per-route pricing).
+- **Precedence**: static `tokenConfig` (authoritative) → auto LiteLLM price map →
+  `defaultRate` (6 USD/1M) for models in neither.
 
-So the complete, streaming-safe setup is `useResponseCost: true` **plus** a
-`tokenConfig` block for the models on your proxy (LiteLLM publishes its full
-price map at
-`github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json`).
-Without `tokenConfig`, streamed calls fall back to `defaultRate` (6 USD/1M).
+So the streaming-standard setup is just `useResponseCost: true` — no per-model
+config. A static `tokenConfig` block remains supported to override specific
+models (e.g. custom-named deployments not in LiteLLM's public map).
 
 ## Implementation notes (shipped)
 
