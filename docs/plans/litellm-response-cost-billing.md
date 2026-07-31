@@ -274,6 +274,45 @@ Behavior:
 - The pre-request balance gate (`checkBalance`) still uses the multiplier
   estimate; the accurate cost is reconciled on the post-response debit.
 
+## Streaming caveat + the OpenRouter pattern (validated against the live proxy)
+
+Live testing against a real LiteLLM proxy (v1.93.0) established:
+
+- **Non-streaming**: `x-litellm-response-cost` header is present and exact.
+  Verified end-to-end: captured `$0.0002106`, correlated by `chatcmpl-…` id,
+  converted to `-210.6` credits. `content-type: application/json`.
+- **Streaming** (LibreChat's default): the cost header is **absent** — LiteLLM
+  computes streaming cost only *after* the stream ends, but response headers are
+  already flushed. The final SSE `usage` chunk carries token counts only, no
+  cost. `x-litellm-response-cost-original: 0.0`. `/spend/logs` and `/model/info`
+  are commonly gated to `llm_api_routes` on virtual keys (403), so no post-hoc
+  cost lookup either.
+
+Therefore the accurate cost header alone cannot cover streaming traffic.
+
+**OpenRouter is the repo's reference for streaming-safe billing**, and it does
+NOT use provider-reported cost. It fetches per-model prices once
+(`FetchTokenConfig` → `processModelData`, per-1M rates), stores them as
+`endpointTokenConfig`, and bills `token × multiplier` at runtime. This works on
+streaming because it only needs token counts, which LibreChat always has in
+`usage_metadata`. OpenRouter never reads its own `usage.cost`.
+
+**Recommended hybrid for LiteLLM (this is what the shipped code already does):**
+
+- **Streaming**: token counts × a **static `tokenConfig`** price map in
+  `librechat.yaml`. A static `tokenConfig` becomes the same `endpointTokenConfig`
+  OpenRouter's fetch produces (`initialize.ts:265`) and flows through the
+  identical `getMultiplier` path — so streaming is priced exactly like
+  OpenRouter, with zero new billing code.
+- **Non-streaming**: the exact `x-litellm-response-cost` header overrides the
+  estimate (accuracy bonus where available).
+
+So the complete, streaming-safe setup is `useResponseCost: true` **plus** a
+`tokenConfig` block for the models on your proxy (LiteLLM publishes its full
+price map at
+`github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json`).
+Without `tokenConfig`, streamed calls fall back to `defaultRate` (6 USD/1M).
+
 ## Implementation notes (shipped)
 
 - Correlation uses a request-scoped `ResponseCostCollector` held in an

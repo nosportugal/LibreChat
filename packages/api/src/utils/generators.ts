@@ -89,13 +89,18 @@ async function captureResponseCost(
       return;
     }
     let id: string | undefined;
-    try {
-      // Peek at a bounded prefix of a clone to resolve the completion id without
-      // consuming the real body (streaming or not).
-      const text = await res.clone().text();
-      id = extractCompletionId(text.slice(0, 512));
-    } catch {
-      // Body not clonable/readable as text (rare); record cost without id.
+    // Only resolve the completion id from a non-streaming JSON body. For an
+    // event-stream, `clone().text()` would buffer the entire stream (hang/OOM
+    // risk); record the cost without an id instead. In practice providers that
+    // stream do not emit this cost header, so this branch rarely triggers.
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json')) {
+      try {
+        const text = await res.clone().text();
+        id = extractCompletionId(text.slice(0, 512));
+      } catch {
+        // Body not clonable/readable as text (rare); record cost without id.
+      }
     }
     costCollector.record(costUSD, id);
   } catch (err) {
