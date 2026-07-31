@@ -33,10 +33,24 @@ export class ResponseCostCollector {
     this.ordered.push(costUSD);
   }
 
-  /** Look up a captured cost by completion id. */
+  /** Look up a captured cost by completion id (non-consuming). */
   getById(id?: string): number | undefined {
     if (id && this.byId.has(id)) {
       return this.byId.get(id);
+    }
+    return undefined;
+  }
+
+  /**
+   * Consumes and returns the cost for a completion id, removing it so the same
+   * cost can never be billed twice (e.g. on a retried callback). Returns
+   * undefined when the id is unknown.
+   */
+  consumeById(id?: string): number | undefined {
+    if (id != null && this.byId.has(id)) {
+      const cost = this.byId.get(id);
+      this.byId.delete(id);
+      return cost;
     }
     return undefined;
   }

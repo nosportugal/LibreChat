@@ -73,6 +73,20 @@ describe('ResponseCostCollector', () => {
     expect(c.getById('unknown')).toBeUndefined();
     expect(c.getById(undefined)).toBeUndefined();
   });
+
+  it('consumeById removes the cost so it cannot be billed twice', () => {
+    const c = new ResponseCostCollector();
+    c.record(0.05, 'chatcmpl-1');
+    expect(c.consumeById('chatcmpl-1')).toBe(0.05);
+    expect(c.consumeById('chatcmpl-1')).toBeUndefined();
+    expect(c.getById('chatcmpl-1')).toBeUndefined();
+  });
+
+  it('consumeById returns undefined for unknown/undefined id', () => {
+    const c = new ResponseCostCollector();
+    expect(c.consumeById('nope')).toBeUndefined();
+    expect(c.consumeById(undefined)).toBeUndefined();
+  });
 });
 
 describe('responseCostStorage ALS', () => {

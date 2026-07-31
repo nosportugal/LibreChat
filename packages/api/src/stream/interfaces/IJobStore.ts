@@ -305,6 +305,12 @@ export interface UsageMetadata {
     reasoning?: number;
     audio?: number;
   };
+  /**
+   * Provider-reported cost in USD for this completion (e.g. LiteLLM's
+   * `x-litellm-response-cost`). When present on an opt-in endpoint, billing uses
+   * this exact amount instead of the token*multiplier estimate.
+   */
+  costUSD?: number;
 }
 
 /**

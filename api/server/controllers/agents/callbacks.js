@@ -25,6 +25,7 @@ const {
   isCodeSessionToolName,
   shouldSignalSandboxStart,
   getToolInputValidationDetails,
+  getResponseCostCollector,
 } = require('@librechat/api');
 const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput, runPreviewFinalize } = require('~/server/services/Files/Code/process');
@@ -130,6 +131,19 @@ class ModelEndHandler {
         metadata?.hide_sequential_outputs === true
       ) {
         taggedUsage = { ...taggedUsage, usage_type: 'sequential' };
+      }
+
+      /** Accurate billing (opt-in endpoints, e.g. LiteLLM): if the request's
+       *  fetch captured a provider response-cost for this completion, attach it
+       *  so recordCollectedUsage bills the exact cost instead of token*multiplier.
+       *  Correlate by completion id; consume so a retried callback can't double-bill. */
+      const costCollector = getResponseCostCollector();
+      if (costCollector) {
+        const completionId = data?.output?.response_metadata?.id ?? data?.output?.id;
+        const costUSD = costCollector.consumeById(completionId);
+        if (costUSD != null) {
+          taggedUsage.costUSD = costUSD;
+        }
       }
 
       this.collectedUsage.push(taggedUsage);

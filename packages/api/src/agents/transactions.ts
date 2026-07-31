@@ -83,6 +83,12 @@ export interface TxMetadata {
   balance?: Partial<TCustomConfig['balance']> | null;
   transactions?: Partial<TTransactionsConfig>;
   endpointTokenConfig?: EndpointTokenConfig;
+  /**
+   * Provider-reported exact cost in USD for this call (e.g. LiteLLM). When set,
+   * the transaction is billed directly from this amount, bypassing the
+   * token*multiplier calculation.
+   */
+  costUSD?: number;
 }
 
 export interface BulkWriteDeps {

@@ -601,6 +601,9 @@ export async function recordCollectedUsage(
           : endpointTokenConfig,
         context: usageContext,
         model: usage.model ?? model,
+        /** Exact provider cost (e.g. LiteLLM response-cost header) for this call;
+         *  when present, bills directly instead of token*multiplier. */
+        costUSD: usage.costUSD,
       };
 
       if (useBulk) {
