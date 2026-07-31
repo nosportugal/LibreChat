@@ -134,15 +134,22 @@ class ModelEndHandler {
       }
 
       /** Accurate billing (opt-in endpoints, e.g. LiteLLM): if the request's
-       *  fetch captured a provider response-cost for this completion, attach it
-       *  so recordCollectedUsage bills the exact cost instead of token*multiplier.
+       *  fetch captured provider signals for this completion, use them.
+       *  - costUSD (non-streaming): bill the exact cost, bypassing token*multiplier.
+       *  - modelId (streaming + non-streaming): the deployment actually served.
+       *    For router/fallback/auto-router aliases the response reports only the
+       *    alias (often priced 0), so re-key pricing to the real deployment id
+       *    which the auto-loaded /model/info config also carries.
        *  Correlate by completion id; consume so a retried callback can't double-bill. */
       const costCollector = getResponseCostCollector();
       if (costCollector) {
         const completionId = data?.output?.response_metadata?.id ?? data?.output?.id;
-        const costUSD = costCollector.consumeById(completionId);
-        if (costUSD != null) {
-          taggedUsage.costUSD = costUSD;
+        const captured = costCollector.consumeById(completionId);
+        if (captured?.costUSD != null) {
+          taggedUsage.costUSD = captured.costUSD;
+        }
+        if (captured?.modelId) {
+          taggedUsage.routedModelId = captured.modelId;
         }
       }
 

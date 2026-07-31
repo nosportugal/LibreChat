@@ -311,6 +311,14 @@ export interface UsageMetadata {
    * this exact amount instead of the token*multiplier estimate.
    */
   costUSD?: number;
+  /**
+   * The deployment id actually served (LiteLLM `x-litellm-model-id`), when it
+   * differs from the requested model — router / fallback / auto-router aliases.
+   * Used to price the real model on streaming, where the response body reports
+   * only the alias (often priced 0). Resolved against the endpoint's price map,
+   * which is keyed by deployment id as well as model name.
+   */
+  routedModelId?: string;
 }
 
 /**

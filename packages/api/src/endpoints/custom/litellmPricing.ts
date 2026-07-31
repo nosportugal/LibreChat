@@ -81,20 +81,31 @@ export function convertLiteLLMPriceMap(map: LiteLLMPriceMap): EndpointTokenConfi
 
 /**
  * Converts a proxy `/model/info` response (`{ data: [{ model_name, model_info }] }`)
- * into `EndpointTokenConfig`, keyed by the public `model_name`. This is the
- * proxy's authoritative CUSTOM pricing.
+ * into `EndpointTokenConfig`. Each deployment is keyed BOTH by its public
+ * `model_name` AND by its `model_info.id` (the deployment id surfaced in the
+ * `x-litellm-model-id` response header). The id keying lets router/fallback
+ * responses — where the response body reports the alias, not the served model —
+ * be priced by the deployment actually used. This is the proxy's authoritative
+ * CUSTOM pricing.
  */
 export function convertModelInfoResponse(data: { data?: ModelInfoEntry[] }): EndpointTokenConfig {
   const config: EndpointTokenConfig = {};
   for (const item of data?.data ?? []) {
     const name = item?.model_name;
     const info = item?.model_info;
-    if (!name || info == null) {
+    if (info == null) {
       continue;
     }
     const tokenConfig = toTokenConfig(info);
-    if (tokenConfig) {
+    if (!tokenConfig) {
+      continue;
+    }
+    if (name) {
       config[name] = tokenConfig;
+    }
+    const id = typeof info.id === 'string' ? info.id : undefined;
+    if (id) {
+      config[id] = tokenConfig;
     }
   }
   return config;

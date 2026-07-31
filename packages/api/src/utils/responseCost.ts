@@ -11,30 +11,47 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * list is kept for cases where the id is unavailable.
  */
 export const LITELLM_COST_HEADER = 'x-litellm-response-cost';
+export const LITELLM_MODEL_ID_HEADER = 'x-litellm-model-id';
 
 export interface ResponseCostEntry {
-  /** Completion id (e.g. `chatcmpl-...`) when resolvable, else undefined. */
-  id?: string;
-  /** Cost in USD. */
-  costUSD: number;
+  /** Cost in USD (from `x-litellm-response-cost`), when present. */
+  costUSD?: number;
+  /**
+   * The deployment id actually served (`x-litellm-model-id`). Differs from the
+   * requested model for router/fallback/auto-router aliases; used to price the
+   * real model on streaming, where the response body reports only the alias.
+   */
+  modelId?: string;
 }
 
 export class ResponseCostCollector {
-  private byId = new Map<string, number>();
-  private ordered: number[] = [];
+  private byId = new Map<string, ResponseCostEntry>();
+  private count = 0;
 
-  record(costUSD: number, id?: string): void {
-    if (!Number.isFinite(costUSD) || costUSD < 0) {
+  /**
+   * Records the provider signals for a completion: the exact USD cost (present
+   * on non-streaming) and/or the served deployment id (present on both). Invalid
+   * costs are dropped; a bare model id (streaming) is still recorded.
+   */
+  record(id: string | undefined, entry: ResponseCostEntry): void {
+    const clean: ResponseCostEntry = {};
+    if (entry.costUSD != null && Number.isFinite(entry.costUSD) && entry.costUSD >= 0) {
+      clean.costUSD = entry.costUSD;
+    }
+    if (entry.modelId) {
+      clean.modelId = entry.modelId;
+    }
+    if (clean.costUSD == null && clean.modelId == null) {
       return;
     }
+    this.count++;
     if (id) {
-      this.byId.set(id, costUSD);
+      this.byId.set(id, { ...this.byId.get(id), ...clean });
     }
-    this.ordered.push(costUSD);
   }
 
-  /** Look up a captured cost by completion id (non-consuming). */
-  getById(id?: string): number | undefined {
+  /** Look up captured signals by completion id (non-consuming). */
+  getById(id?: string): ResponseCostEntry | undefined {
     if (id && this.byId.has(id)) {
       return this.byId.get(id);
     }
@@ -42,21 +59,20 @@ export class ResponseCostCollector {
   }
 
   /**
-   * Consumes and returns the cost for a completion id, removing it so the same
-   * cost can never be billed twice (e.g. on a retried callback). Returns
-   * undefined when the id is unknown.
+   * Consumes and returns the captured signals for a completion id, removing them
+   * so the same cost can never be billed twice (e.g. on a retried callback).
    */
-  consumeById(id?: string): number | undefined {
+  consumeById(id?: string): ResponseCostEntry | undefined {
     if (id != null && this.byId.has(id)) {
-      const cost = this.byId.get(id);
+      const entry = this.byId.get(id);
       this.byId.delete(id);
-      return cost;
+      return entry;
     }
     return undefined;
   }
 
   get size(): number {
-    return this.ordered.length;
+    return this.count;
   }
 }
 

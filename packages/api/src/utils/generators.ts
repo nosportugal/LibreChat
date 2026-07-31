@@ -7,7 +7,7 @@ import type { Agent as HttpAgent } from 'node:http';
 import type { URL as NodeURL } from 'node:url';
 import type { ServerSentEvent } from '~/types';
 import type { ResponseCostCollector } from './responseCost';
-import { LITELLM_COST_HEADER, parseResponseCostHeader, extractCompletionId } from './responseCost';
+import { LITELLM_COST_HEADER, LITELLM_MODEL_ID_HEADER, parseResponseCostHeader, extractCompletionId } from './responseCost';
 import { sendEvent } from './events';
 
 type SSRFSafeAgents = {
@@ -85,27 +85,68 @@ async function captureResponseCost(
 ): Promise<void> {
   try {
     const costUSD = parseResponseCostHeader(res.headers.get(LITELLM_COST_HEADER));
-    if (costUSD == null) {
+    const modelId = res.headers.get(LITELLM_MODEL_ID_HEADER) ?? undefined;
+    // Nothing to correlate if the provider exposed neither signal.
+    if (costUSD == null && !modelId) {
       return;
     }
-    let id: string | undefined;
-    // Only resolve the completion id from a non-streaming JSON body. For an
-    // event-stream, `clone().text()` would buffer the entire stream (hang/OOM
-    // risk); record the cost without an id instead. In practice providers that
-    // stream do not emit this cost header, so this branch rarely triggers.
     const contentType = res.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      try {
-        const text = await res.clone().text();
-        id = extractCompletionId(text.slice(0, 512));
-      } catch {
-        // Body not clonable/readable as text (rare); record cost without id.
-      }
-    }
-    costCollector.record(costUSD, id);
+    const id = await resolveCompletionId(res, contentType);
+    costCollector.record(id, { costUSD, modelId });
   } catch (err) {
     logger.debug('[createFetch] Failed to capture response cost', err);
   }
+}
+
+/**
+ * Resolves the completion id (`chatcmpl-…`) needed to correlate captured
+ * cost/model-id to the right usage record. For JSON (non-streaming) reads the
+ * cloned body; for an event-stream reads only a bounded PREFIX of a clone (the
+ * id is in the first chunk) so the real stream is never drained — avoiding the
+ * hang/OOM risk of buffering the whole stream.
+ */
+async function resolveCompletionId(
+  res: fetch.Response,
+  contentType: string,
+): Promise<string | undefined> {
+  try {
+    if (contentType.includes('application/json')) {
+      const text = await res.clone().text();
+      return extractCompletionId(text.slice(0, 512));
+    }
+    if (contentType.includes('text/event-stream') || contentType.includes('stream')) {
+      const body = res.clone().body as NodeJS.ReadableStream | null;
+      if (!body) {
+        return undefined;
+      }
+      return await readIdFromStreamPrefix(body);
+    }
+  } catch {
+    // Body not readable; record without a completion id.
+  }
+  return undefined;
+}
+
+/** Reads at most ~2KB from a stream clone to extract the completion id from the
+ *  first SSE chunk, then stops without consuming the rest. */
+function readIdFromStreamPrefix(stream: NodeJS.ReadableStream): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    let buffer = '';
+    const done = (id?: string) => {
+      stream.removeAllListeners();
+      // Best-effort: let the clone be GC'd; do not destroy the real response.
+      resolve(id);
+    };
+    stream.on('data', (chunk: Buffer | string) => {
+      buffer += chunk.toString();
+      const id = extractCompletionId(buffer);
+      if (id || buffer.length > 2048) {
+        done(id);
+      }
+    });
+    stream.on('end', () => done(extractCompletionId(buffer)));
+    stream.on('error', () => done(undefined));
+  });
 }
 
 /**

@@ -337,3 +337,27 @@ models (e.g. custom-named deployments not in LiteLLM's public map).
   token counts for display.
 - Tests: `responseCost.spec.ts`, `generators.spec.ts`, `prepareCostSpend.spec.ts`,
   plus `useResponseCost` cases in `config-schemas.spec.ts`.
+
+## Router / fallback / auto-router pricing (validated live)
+
+When LiteLLM routes a request to a different model than requested (auto-router
+aliases, fallbacks, load balancing), the response body reports only the
+**alias** — which on this proxy is often priced `0`. Left unhandled, streamed
+router calls would bill nothing (revenue leak).
+
+Handled via the `x-litellm-model-id` response header (present on streaming AND
+non-streaming), which carries the **real served deployment id**:
+
+- `convertModelInfoResponse` keys the price map by BOTH `model_name` and
+  `model_info.id`, so a deployment id resolves to its real prices.
+- `createFetch` captures `x-litellm-model-id` alongside the cost; on streaming it
+  reads only the first SSE chunk of a clone to get the completion id (never
+  drains the stream).
+- `ModelEndHandler` attaches `usage.routedModelId`; `pickPricingModel` prices by
+  the routed id when the requested alias is unpriced but the routed id is priced.
+
+**Live-verified**: request `auto-nos-gpt` (priced 0) → routed to gemini deployment
+`993dc47…` → our estimate `$0.00003475` equals LiteLLM's own cost `$0.00003475`.
+
+Non-streaming still uses the exact `x-litellm-response-cost` header regardless of
+routing.

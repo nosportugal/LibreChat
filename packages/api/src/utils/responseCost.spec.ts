@@ -51,33 +51,49 @@ describe('extractCompletionId', () => {
 describe('ResponseCostCollector', () => {
   it('records and looks up cost by completion id', () => {
     const c = new ResponseCostCollector();
-    c.record(0.0012, 'chatcmpl-1');
-    c.record(0.0034, 'chatcmpl-2');
-    expect(c.getById('chatcmpl-1')).toBe(0.0012);
-    expect(c.getById('chatcmpl-2')).toBe(0.0034);
+    c.record('chatcmpl-1', { costUSD: 0.0012 });
+    c.record('chatcmpl-2', { costUSD: 0.0034 });
+    expect(c.getById('chatcmpl-1')?.costUSD).toBe(0.0012);
+    expect(c.getById('chatcmpl-2')?.costUSD).toBe(0.0034);
     expect(c.size).toBe(2);
   });
 
-  it('ignores invalid costs', () => {
+  it('records a routed model id (streaming, no cost)', () => {
     const c = new ResponseCostCollector();
-    c.record(NaN, 'a');
-    c.record(-1, 'b');
+    c.record('chatcmpl-1', { modelId: 'deploy-abc' });
+    expect(c.getById('chatcmpl-1')).toEqual({ modelId: 'deploy-abc' });
+    expect(c.size).toBe(1);
+  });
+
+  it('merges cost and modelId recorded for the same id', () => {
+    const c = new ResponseCostCollector();
+    c.record('chatcmpl-1', { modelId: 'deploy-abc' });
+    c.record('chatcmpl-1', { costUSD: 0.02 });
+    expect(c.getById('chatcmpl-1')).toEqual({ modelId: 'deploy-abc', costUSD: 0.02 });
+  });
+
+  it('ignores invalid costs but keeps a valid modelId', () => {
+    const c = new ResponseCostCollector();
+    c.record('a', { costUSD: NaN });
+    c.record('b', { costUSD: -1 });
+    c.record('c', { costUSD: -1, modelId: 'm' });
     expect(c.getById('a')).toBeUndefined();
     expect(c.getById('b')).toBeUndefined();
-    expect(c.size).toBe(0);
+    expect(c.getById('c')).toEqual({ modelId: 'm' });
+    expect(c.size).toBe(1);
   });
 
   it('returns undefined for unknown id', () => {
     const c = new ResponseCostCollector();
-    c.record(0.01, 'known');
+    c.record('known', { costUSD: 0.01 });
     expect(c.getById('unknown')).toBeUndefined();
     expect(c.getById(undefined)).toBeUndefined();
   });
 
-  it('consumeById removes the cost so it cannot be billed twice', () => {
+  it('consumeById removes the entry so it cannot be billed twice', () => {
     const c = new ResponseCostCollector();
-    c.record(0.05, 'chatcmpl-1');
-    expect(c.consumeById('chatcmpl-1')).toBe(0.05);
+    c.record('chatcmpl-1', { costUSD: 0.05 });
+    expect(c.consumeById('chatcmpl-1')?.costUSD).toBe(0.05);
     expect(c.consumeById('chatcmpl-1')).toBeUndefined();
     expect(c.getById('chatcmpl-1')).toBeUndefined();
   });
@@ -103,8 +119,8 @@ describe('responseCostStorage ALS', () => {
     const c = new ResponseCostCollector();
     await runWithResponseCostCollector(c, async () => {
       await Promise.resolve();
-      c.record(0.02, 'chatcmpl-async');
-      expect(getResponseCostCollector()?.getById('chatcmpl-async')).toBe(0.02);
+      c.record('chatcmpl-async', { costUSD: 0.02 });
+      expect(getResponseCostCollector()?.getById('chatcmpl-async')?.costUSD).toBe(0.02);
     });
   });
 

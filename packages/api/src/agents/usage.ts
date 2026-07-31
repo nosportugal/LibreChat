@@ -107,6 +107,41 @@ interface SplitUsage {
   completion: number;
 }
 
+/** Returns true when the endpoint config prices `modelKey` with a non-zero
+ *  prompt or completion rate. */
+function isPricedInConfig(
+  modelKey: string | undefined,
+  config: EndpointTokenConfig | undefined,
+): boolean {
+  if (!modelKey || !config) {
+    return false;
+  }
+  const entry = config[modelKey];
+  return entry != null && ((entry.prompt ?? 0) > 0 || (entry.completion ?? 0) > 0);
+}
+
+/**
+ * Chooses which model key to price by. Prefers the requested model, but when a
+ * routed deployment id was captured (router / fallback / auto-router) and the
+ * requested model has no usable price while the routed id does, prices by the
+ * routed id. Falls back to the requested model otherwise.
+ */
+export function pickPricingModel(
+  requestedModel: string | undefined,
+  routedModelId: string | undefined,
+  config: EndpointTokenConfig | undefined,
+): string | undefined {
+  if (
+    routedModelId &&
+    routedModelId !== requestedModel &&
+    !isPricedInConfig(requestedModel, config) &&
+    isPricedInConfig(routedModelId, config)
+  ) {
+    return routedModelId;
+  }
+  return requestedModel;
+}
+
 function splitUsage(usage: UsageMetadata): SplitUsage {
   const cacheCreation = getCacheCreationTokens(usage);
   const cacheRead =
@@ -588,6 +623,21 @@ export async function recordCollectedUsage(
         total_output_tokens += completion;
       }
 
+      const resolvedEndpointTokenConfig = resolveEndpointTokenConfig
+        ? resolveEndpointTokenConfig(usage)
+        : endpointTokenConfig;
+
+      /** Router/fallback pricing: for auto-router aliases the served model
+       *  differs from the requested one and the alias is often priced 0. When a
+       *  routed deployment id was captured and it (not the requested model) has a
+       *  usable price in the endpoint config, price by the routed id. */
+      const requestedModel = usage.model ?? model;
+      const pricingModel = pickPricingModel(
+        requestedModel,
+        usage.routedModelId,
+        resolvedEndpointTokenConfig,
+      );
+
       const txMetadata: TxMetadata = {
         user,
         balance,
@@ -597,11 +647,9 @@ export async function recordCollectedUsage(
         /** Price with the producing agent's endpoint config when a resolver is
          *  provided (multi-endpoint graphs); it owns the fallback to the primary
          *  config, so `undefined` here means built-in pricing, not the batch one. */
-        endpointTokenConfig: resolveEndpointTokenConfig
-          ? resolveEndpointTokenConfig(usage)
-          : endpointTokenConfig,
+        endpointTokenConfig: resolvedEndpointTokenConfig,
         context: usageContext,
-        model: usage.model ?? model,
+        model: pricingModel,
         /** Exact provider cost (e.g. LiteLLM response-cost header) for this call;
          *  when present, bills directly instead of token*multiplier. */
         costUSD: usage.costUSD,
