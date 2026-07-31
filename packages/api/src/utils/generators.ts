@@ -6,6 +6,8 @@ import type { Agent as HttpsAgent } from 'node:https';
 import type { Agent as HttpAgent } from 'node:http';
 import type { URL as NodeURL } from 'node:url';
 import type { ServerSentEvent } from '~/types';
+import type { ResponseCostCollector } from './responseCost';
+import { LITELLM_COST_HEADER, parseResponseCostHeader, extractCompletionId } from './responseCost';
 import { sendEvent } from './events';
 
 type SSRFSafeAgents = {
@@ -27,11 +29,18 @@ export function createFetch({
   reverseProxyUrl = '',
   ssrfAgents,
   redirect,
+  costCollector,
 }: {
   directEndpoint?: boolean;
   reverseProxyUrl?: string;
   ssrfAgents?: SSRFSafeAgents;
   redirect?: fetch.RequestRedirect;
+  /**
+   * When provided, the wrapper reads the provider's response-cost header
+   * (e.g. LiteLLM's `x-litellm-response-cost`) off each response and records it,
+   * keyed by completion id, for accurate post-response billing.
+   */
+  costCollector?: ResponseCostCollector;
 }) {
   /**
    * Makes an HTTP request and logs the process.
@@ -56,11 +65,42 @@ export function createFetch({
     if (redirect) {
       requestInit.redirect = redirect;
     }
-    if (typeof Bun !== 'undefined') {
-      return await fetch(url, requestInit);
+    const res = await fetch(url, requestInit);
+    if (costCollector) {
+      await captureResponseCost(res, costCollector);
     }
-    return await fetch(url, requestInit);
+    return res;
   };
+}
+
+/**
+ * Reads the provider response-cost header off a response and records it into the
+ * collector, correlated to the completion id when resolvable. Clones the response
+ * so the stream body is never consumed. All failures are swallowed — cost capture
+ * must never break the request; billing falls back to token*multiplier.
+ */
+async function captureResponseCost(
+  res: fetch.Response,
+  costCollector: ResponseCostCollector,
+): Promise<void> {
+  try {
+    const costUSD = parseResponseCostHeader(res.headers.get(LITELLM_COST_HEADER));
+    if (costUSD == null) {
+      return;
+    }
+    let id: string | undefined;
+    try {
+      // Peek at a bounded prefix of a clone to resolve the completion id without
+      // consuming the real body (streaming or not).
+      const text = await res.clone().text();
+      id = extractCompletionId(text.slice(0, 512));
+    } catch {
+      // Body not clonable/readable as text (rare); record cost without id.
+    }
+    costCollector.record(costUSD, id);
+  } catch (err) {
+    logger.debug('[createFetch] Failed to capture response cost', err);
+  }
 }
 
 /**
