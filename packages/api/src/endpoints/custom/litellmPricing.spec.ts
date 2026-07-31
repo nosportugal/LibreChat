@@ -2,7 +2,18 @@ jest.mock('@librechat/data-schemas', () => ({
   logger: { debug: jest.fn(), warn: jest.fn() },
 }));
 
-import { convertLiteLLMPriceMap, convertModelInfoResponse } from './litellmPricing';
+const mockGet = jest.fn();
+jest.mock('axios', () => ({ __esModule: true, default: { get: (...a: unknown[]) => mockGet(...a) } }));
+
+import {
+  convertLiteLLMPriceMap,
+  convertModelInfoResponse,
+  fetchProxyModelInfo,
+} from './litellmPricing';
+
+const okData = {
+  data: [{ model_name: 'gpt-5-nano', model_info: { input_cost_per_token: 5e-8, output_cost_per_token: 4e-7 } }],
+};
 
 describe('convertLiteLLMPriceMap', () => {
   it('converts per-token costs to per-1M rates', () => {
@@ -99,5 +110,45 @@ describe('convertModelInfoResponse (proxy custom pricing)', () => {
   it('handles empty/missing data', () => {
     expect(convertModelInfoResponse({})).toEqual({});
     expect(convertModelInfoResponse({ data: [] })).toEqual({});
+  });
+});
+
+describe('fetchProxyModelInfo route candidates', () => {
+  beforeEach(() => mockGet.mockReset());
+
+  it('tries both /model/info and /v1/model/info when baseURL has no /v1', async () => {
+    // First route 403s, second succeeds -> proves fallthrough to /v1/model/info
+    mockGet
+      .mockRejectedValueOnce(new Error('403'))
+      .mockResolvedValueOnce({ data: okData });
+    const out = await fetchProxyModelInfo('https://litellm.example.com', 'sk-key');
+    expect(out?.['gpt-5-nano']).toBeDefined();
+    const urls = mockGet.mock.calls.map((c) => c[0]);
+    expect(urls).toContain('https://litellm.example.com/model/info');
+    expect(urls).toContain('https://litellm.example.com/v1/model/info');
+  });
+
+  it('tries both routes when baseURL already ends in /v1 (no duplicate /v1/v1)', async () => {
+    mockGet
+      .mockRejectedValueOnce(new Error('403'))
+      .mockResolvedValueOnce({ data: okData });
+    const out = await fetchProxyModelInfo('https://litellm.example.com/v1', 'sk-key');
+    expect(out?.['gpt-5-nano']).toBeDefined();
+    const urls = mockGet.mock.calls.map((c) => c[0]);
+    expect(urls).toContain('https://litellm.example.com/v1/model/info');
+    expect(urls).toContain('https://litellm.example.com/model/info');
+    expect(urls.some((u: string) => u.includes('/v1/v1/'))).toBe(false);
+  });
+
+  it('sends the endpoint key as a Bearer token', async () => {
+    mockGet.mockResolvedValueOnce({ data: okData });
+    await fetchProxyModelInfo('https://litellm.example.com/v1', 'sk-secret');
+    expect(mockGet.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-secret');
+  });
+
+  it('returns undefined when every route fails', async () => {
+    mockGet.mockRejectedValue(new Error('403'));
+    const out = await fetchProxyModelInfo('https://litellm.example.com/v1', 'sk-key');
+    expect(out).toBeUndefined();
   });
 });
