@@ -995,6 +995,14 @@ export const endpointSchema = baseEndpointSchema.merge(
       .strict()
       .optional(),
     directEndpoint: z.boolean().optional(),
+    /**
+     * Trust the provider's response-cost header (`x-litellm-response-cost`) as
+     * the authoritative billed amount for this endpoint, instead of LibreChat's
+     * token*multiplier estimate. For LiteLLM proxies, this reflects the real
+     * per-route/fallback cost. Falls back to token*multiplier when the header is
+     * absent on a response.
+     */
+    useResponseCost: z.boolean().optional(),
     titleMessageRole: z.enum(['system', 'user', 'assistant']).optional(),
     /** Static per-model token config: context window and per-million-token rates */
     tokenConfig: z

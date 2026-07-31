@@ -302,6 +302,25 @@ describe('endpointSchema addParams validation', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts useResponseCost as an optional boolean', () => {
+    const result = endpointSchema.safeParse({
+      ...validEndpoint,
+      useResponseCost: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.useResponseCost).toBe(true);
+    }
+  });
+
+  it('omits useResponseCost when not provided', () => {
+    const result = endpointSchema.safeParse(validEndpoint);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.useResponseCost).toBeUndefined();
+    }
+  });
+
   it('accepts scalar addParams values', () => {
     const result = endpointSchema.safeParse({
       ...validEndpoint,
