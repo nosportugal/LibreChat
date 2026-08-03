@@ -48,14 +48,6 @@ export class ResponseCostCollector {
     }
   }
 
-  /** Look up captured signals by completion id (non-consuming). */
-  getById(id?: string): ResponseCostEntry | undefined {
-    if (id && this.byId.has(id)) {
-      return this.byId.get(id);
-    }
-    return undefined;
-  }
-
   /**
    * Consumes and returns the captured signals for a completion id, removing them
    * so the same cost can never be billed twice (e.g. on a retried callback).

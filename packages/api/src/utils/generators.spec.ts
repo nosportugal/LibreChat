@@ -48,7 +48,10 @@ describe('createFetch cost capture', () => {
     const collector = new ResponseCostCollector();
     const fn = createFetch({ costCollector: collector });
     await fn('http://litellm/v1/chat/completions', {});
-    expect(collector.getById('chatcmpl-abc')).toEqual({ costUSD: 0.00123, modelId: 'deploy-1' });
+    expect(collector.consumeById('chatcmpl-abc')).toEqual({
+      costUSD: 0.00123,
+      modelId: 'deploy-1',
+    });
   });
 
   it('does nothing when neither cost nor model id header is present', async () => {
@@ -56,7 +59,7 @@ describe('createFetch cost capture', () => {
     const collector = new ResponseCostCollector();
     const fn = createFetch({ costCollector: collector });
     await fn('http://litellm/v1/chat/completions', {});
-    expect(collector.size).toBe(0);
+    expect(collector.consumeById('chatcmpl-x')).toBeUndefined();
   });
 
   it('ignores an invalid cost but still records the model id', async () => {
@@ -69,7 +72,7 @@ describe('createFetch cost capture', () => {
     const collector = new ResponseCostCollector();
     const fn = createFetch({ costCollector: collector });
     await fn('http://litellm/v1/chat/completions', {});
-    expect(collector.getById('chatcmpl-x')).toEqual({ modelId: 'deploy-2' });
+    expect(collector.consumeById('chatcmpl-x')).toEqual({ modelId: 'deploy-2' });
   });
 
   it('returns the original response object (never the clone)', async () => {
@@ -98,6 +101,6 @@ describe('createFetch cost capture', () => {
     const collector = new ResponseCostCollector();
     const fn = createFetch({ costCollector: collector });
     await fn('http://litellm/v1/chat/completions', {});
-    expect(collector.getById('chatcmpl-stream')).toEqual({ modelId: 'deploy-routed' });
+    expect(collector.consumeById('chatcmpl-stream')).toEqual({ modelId: 'deploy-routed' });
   });
 });

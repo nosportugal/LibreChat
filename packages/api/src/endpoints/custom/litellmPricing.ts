@@ -131,9 +131,7 @@ export async function fetchProxyModelInfo(
   // only there), then fall back to the bare route. Returns on the first that
   // works; deduped so an existing `/v1` isn't doubled.
   const root = base.replace(/\/v1$/, '');
-  const candidates = Array.from(
-    new Set([`${root}/v1/model/info`, `${root}/model/info`]),
-  );
+  const candidates = [`${root}/v1/model/info`, `${root}/model/info`];
   for (const url of candidates) {
     try {
       const res = await axios.get(url, {
