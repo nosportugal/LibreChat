@@ -281,7 +281,7 @@ export async function initializeCustom({
    *  price map. A static `tokenConfig` still wins (authoritative), and the
    *  response-cost header still overrides per non-streaming call. Cached
    *  per-endpoint since custom prices differ by proxy. */
-  if (endpointTokenConfig == null && endpointConfig.useResponseCost === true && apiKey) {
+  if (endpointTokenConfig == null && endpointConfig.useLiteLLMResponseCost === true && apiKey) {
     const priceKey = `litellm:price-map:${endpoint}`;
     let priceMap = (await cache.get(priceKey)) as EndpointTokenConfig | undefined;
     if (priceMap == null) {
@@ -364,9 +364,9 @@ export async function initializeCustom({
       /** Opt-in accurate billing: when the endpoint trusts the provider's
        *  response-cost header, install the capturing fetch and wire it to the
        *  ambient request-scoped collector (seeded by the agent controller). */
-      useResponseCost: endpointConfig.useResponseCost === true,
+      useLiteLLMResponseCost: endpointConfig.useLiteLLMResponseCost === true,
       costCollector:
-        endpointConfig.useResponseCost === true ? getResponseCostCollector() : undefined,
+        endpointConfig.useLiteLLMResponseCost === true ? getResponseCostCollector() : undefined,
     };
     options = getOpenAIConfig(apiKey, finalClientOptions, endpoint);
     if (options != null) {

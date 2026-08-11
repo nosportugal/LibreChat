@@ -1002,7 +1002,7 @@ export const endpointSchema = baseEndpointSchema.merge(
      * per-route/fallback cost. Falls back to token*multiplier when the header is
      * absent on a response.
      */
-    useResponseCost: z.boolean().optional(),
+    useLiteLLMResponseCost: z.boolean().optional(),
     titleMessageRole: z.enum(['system', 'user', 'assistant']).optional(),
     /** Static per-model token config: context window and per-million-token rates */
     tokenConfig: z

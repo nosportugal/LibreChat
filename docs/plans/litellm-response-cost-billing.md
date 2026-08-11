@@ -1,6 +1,6 @@
 # Accurate LiteLLM Billing
 
-Opt a custom endpoint into LiteLLM-aware billing with `useResponseCost`:
+Opt a custom endpoint into LiteLLM-aware billing with `useLiteLLMResponseCost`:
 
 ```yaml
 endpoints:
@@ -8,7 +8,7 @@ endpoints:
     - name: "LiteLLM"
       apiKey: "sk-from-config-file"
       baseURL: "http://litellm:4000/v1"
-      useResponseCost: true
+      useLiteLLMResponseCost: true
       models:
         default: ["gpt-4o"]
         fetch: true
@@ -21,7 +21,7 @@ endpoints:
 - Streaming uses proxy `/model/info` pricing, then LiteLLM's public price map.
 - Static `tokenConfig` remains authoritative over automatic pricing.
 - Router and fallback responses use `x-litellm-model-id` to price the served deployment.
-- The feature is opt-in; endpoints without `useResponseCost` are unchanged.
+- The feature is opt-in; endpoints without `useLiteLLMResponseCost` are unchanged.
 
 ## Implementation
 

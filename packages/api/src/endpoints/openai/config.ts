@@ -104,7 +104,7 @@ export function getOpenAIConfig(
     streaming = true,
     modelOptions = {},
     reverseProxyUrl: baseURL,
-    useResponseCost,
+    useLiteLLMResponseCost,
     costCollector,
   } = options;
   const shouldProtectUserBaseURL = options.baseURLIsUserProvided === true && !!baseURL;
@@ -296,7 +296,7 @@ export function getOpenAIConfig(
     configOptions.organization = process.env.OPENAI_ORGANIZATION;
   }
 
-  const shouldCaptureCost = useResponseCost === true && costCollector != null;
+  const shouldCaptureCost = useLiteLLMResponseCost === true && costCollector != null;
   if (
     (directEndpoint === true || shouldCaptureCost) &&
     configOptions?.baseURL != null

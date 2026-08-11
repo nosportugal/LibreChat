@@ -302,22 +302,22 @@ describe('endpointSchema addParams validation', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts useResponseCost as an optional boolean', () => {
+  it('accepts useLiteLLMResponseCost as an optional boolean', () => {
     const result = endpointSchema.safeParse({
       ...validEndpoint,
-      useResponseCost: true,
+      useLiteLLMResponseCost: true,
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.useResponseCost).toBe(true);
+      expect(result.data.useLiteLLMResponseCost).toBe(true);
     }
   });
 
-  it('omits useResponseCost when not provided', () => {
+  it('omits useLiteLLMResponseCost when not provided', () => {
     const result = endpointSchema.safeParse(validEndpoint);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.useResponseCost).toBeUndefined();
+      expect(result.data.useLiteLLMResponseCost).toBeUndefined();
     }
   });
 

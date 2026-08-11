@@ -32,7 +32,7 @@ export interface OpenAIConfigOptions {
    * (`x-litellm-response-cost`) for billing. When set with `costCollector`,
    * `getOpenAIConfig` installs a capturing fetch.
    */
-  useResponseCost?: boolean;
+  useLiteLLMResponseCost?: boolean;
   /** Request-scoped collector the capturing fetch records response costs into. */
   costCollector?: ResponseCostCollector;
 }
