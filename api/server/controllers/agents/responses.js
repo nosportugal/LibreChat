@@ -53,6 +53,7 @@ const {
   markSummarizationUsage,
   createToolEndCallback,
   agentLogHandlerObj,
+  attachResponseCost,
 } = require('~/server/controllers/agents/callbacks');
 const { loadAgentTools, loadToolsForExecution } = require('~/server/services/ToolService');
 const {
@@ -751,6 +752,7 @@ const createResponse = async (req, res) => {
             const usage = data?.output?.usage_metadata;
             if (usage) {
               const taggedUsage = markSummarizationUsage(usage, metadata);
+              attachResponseCost(taggedUsage, data, req.responseCostCollector);
               collectedUsage.push(taggedUsage);
             }
           },
@@ -931,6 +933,7 @@ const createResponse = async (req, res) => {
             const usage = data?.output?.usage_metadata;
             if (usage) {
               const taggedUsage = markSummarizationUsage(usage, metadata);
+              attachResponseCost(taggedUsage, data, req.responseCostCollector);
               collectedUsage.push(taggedUsage);
             }
           },

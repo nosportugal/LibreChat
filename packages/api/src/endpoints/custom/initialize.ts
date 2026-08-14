@@ -366,7 +366,9 @@ export async function initializeCustom({
        *  ambient request-scoped collector (seeded by the agent controller). */
       useLiteLLMResponseCost: endpointConfig.useLiteLLMResponseCost === true,
       costCollector:
-        endpointConfig.useLiteLLMResponseCost === true ? getResponseCostCollector() : undefined,
+        endpointConfig.useLiteLLMResponseCost === true
+          ? req.responseCostCollector ?? getResponseCostCollector()
+          : undefined,
     };
     options = getOpenAIConfig(apiKey, finalClientOptions, endpoint);
     if (options != null) {

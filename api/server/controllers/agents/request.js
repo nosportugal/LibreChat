@@ -1193,6 +1193,7 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
   // (useLiteLLMResponseCost) can capture LiteLLM's response-cost
   // header in the fetch layer and read it back at the billing choke point.
   const collector = new ResponseCostCollector();
+  req.responseCostCollector = collector;
   return runWithResponseCostCollector(collector, () =>
     ResumableAgentController(req, res, next, initializeClient, addTitle),
   );

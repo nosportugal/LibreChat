@@ -1,6 +1,7 @@
 import type { TConversation, TEndpointOption } from 'librechat-data-provider';
 import type { IUser, AppConfig } from '@librechat/data-schemas';
 import type { Request } from 'express';
+import type { ResponseCostCollector } from '~/utils/responseCost';
 
 /**
  * LibreChat-specific request body type that extends Express Request body
@@ -29,4 +30,5 @@ export type ServerRequest = Request<unknown, unknown, RequestBody> & {
   resolvedConversation?: Partial<TConversation> | null;
   /** Passport strategy that populated req.user for this request. */
   authStrategy?: string;
+  responseCostCollector?: ResponseCostCollector;
 };

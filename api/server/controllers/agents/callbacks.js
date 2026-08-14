@@ -39,6 +39,21 @@ function isCodeArtifactToolOutput(output) {
   return isCodeSessionToolName(output.name) || isHostFileAuthoringArtifact(output.artifact);
 }
 
+function attachResponseCost(usage, data, collector) {
+  const costCollector = collector ?? getResponseCostCollector();
+  if (!costCollector) {
+    return;
+  }
+  const completionId = data?.output?.response_metadata?.id ?? data?.output?.id;
+  const captured = costCollector.consumeById(completionId);
+  if (captured?.costUSD != null) {
+    usage.costUSD = captured.costUSD;
+  }
+  if (captured?.modelId) {
+    usage.routedModelId = captured.modelId;
+  }
+}
+
 class ModelEndHandler {
   /**
    * @param {Array<UsageMetadata>} collectedUsage
@@ -56,13 +71,19 @@ class ModelEndHandler {
    * @param {(data: Record<string, unknown>) => Promise<void> | void} [emitUsage] Optional
    *   callback to stream per-call token usage to the client.
    */
-  constructor(collectedUsage, collectedThoughtSignatures = null, emitUsage = null) {
+  constructor(
+    collectedUsage,
+    collectedThoughtSignatures = null,
+    emitUsage = null,
+    responseCostCollector = null,
+  ) {
     if (!Array.isArray(collectedUsage)) {
       throw new Error('collectedUsage must be an array');
     }
     this.collectedUsage = collectedUsage;
     this.collectedThoughtSignatures = collectedThoughtSignatures;
     this.emitUsage = emitUsage;
+    this.responseCostCollector = responseCostCollector;
   }
 
   finalize(errorMessage) {
@@ -141,17 +162,7 @@ class ModelEndHandler {
        *    alias (often priced 0), so re-key pricing to the real deployment id
        *    which the auto-loaded /model/info config also carries.
        *  Correlate by completion id; consume so a retried callback can't double-bill. */
-      const costCollector = getResponseCostCollector();
-      if (costCollector) {
-        const completionId = data?.output?.response_metadata?.id ?? data?.output?.id;
-        const captured = costCollector.consumeById(completionId);
-        if (captured?.costUSD != null) {
-          taggedUsage.costUSD = captured.costUSD;
-        }
-        if (captured?.modelId) {
-          taggedUsage.routedModelId = captured.modelId;
-        }
-      }
+      attachResponseCost(taggedUsage, data, this.responseCostCollector);
 
       this.collectedUsage.push(taggedUsage);
 
@@ -372,6 +383,7 @@ function getDefaultHandlers({
   usageCost = null,
   contextUsageSink = null,
   usageEmitSink = null,
+  responseCostCollector = null,
 }) {
   if (!res || !aggregateContent) {
     throw new Error(
@@ -416,6 +428,7 @@ function getDefaultHandlers({
       collectedUsage,
       collectedThoughtSignatures,
       emitTokenUsage,
+      responseCostCollector,
     ),
     [GraphEvents.TOOL_END]: new ToolEndHandler(toolEndCallback, logger),
     [GraphEvents.ON_RUN_STEP]: {
@@ -1403,4 +1416,5 @@ module.exports = {
   markSummarizationUsage,
   buildSummarizationHandlers,
   createResponsesToolEndCallback,
+  attachResponseCost,
 };

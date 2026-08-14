@@ -16,6 +16,7 @@ const {
   resolveModelSpecSkillIds,
   getAgentStartupTelemetry,
   buildAgentContextAttachmentsByAgentId,
+  getResponseCostCollector,
 } = require('@librechat/api');
 const {
   Permissions,
@@ -351,6 +352,7 @@ const initializeClient = async ({ req, res, signal, endpointOption, jobCreatedAt
     usageCost,
     contextUsageSink,
     usageEmitSink,
+    responseCostCollector: req.responseCostCollector ?? getResponseCostCollector(),
   });
 
   const [
