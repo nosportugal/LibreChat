@@ -45,7 +45,7 @@ describe('createAdminGroupsHandlers', () => {
   function createReqRes(
     overrides: {
       params?: Record<string, string>;
-      query?: Record<string, string>;
+      query?: Record<string, unknown>;
       body?: Record<string, unknown>;
     } = {},
   ) {
@@ -134,6 +134,19 @@ describe('createAdminGroupsHandlers', () => {
 
       expect(deps.listGroups).toHaveBeenCalledWith({ search: 'eng', limit: 50, offset: 0 });
       expect(deps.countGroups).toHaveBeenCalledWith({ search: 'eng' });
+    });
+
+    it('returns 400 when search is not a string', async () => {
+      const deps = createDeps();
+      const handlers = createAdminGroupsHandlers(deps);
+      const { req, res, status, json } = createReqRes({ query: { search: ['eng', 'ineering'] } });
+
+      await handlers.listGroups(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+      expect(json).toHaveBeenCalledWith({ error: 'search must be a string' });
+      expect(deps.listGroups).not.toHaveBeenCalled();
+      expect(deps.countGroups).not.toHaveBeenCalled();
     });
 
     it('ignores invalid source values', async () => {
