@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '@librechat/data-schemas';
+import { replaceSpecialVars } from 'librechat-data-provider';
 import type { ScheduleEngineDeps, ScheduleLimits, FireResult, FireableSchedule } from './types';
 import type { AgentTriggerEnvelope } from '../agents/triggers/envelope';
 import type { JsonValue } from '../agents/json';
@@ -83,7 +84,13 @@ function buildScheduleTriggerEnvelope(
       occurredAt: scheduledFor.getTime(),
       source: { id: schedule.id, type: 'schedule' },
     },
-    input: schedule.prompt,
+    // Resolved against the occurrence time (not wall clock) so a retried occurrence
+    // builds the same input and keeps its idempotency key.
+    input: replaceSpecialVars({
+      text: schedule.prompt,
+      now: scheduledFor,
+      timezone: schedule.timezone,
+    }),
     run: {
       conversationId,
       timezone: schedule.timezone,

@@ -421,6 +421,21 @@ describe('fireSchedule', () => {
     });
   });
 
+  it('resolves date special variables in the prompt at the occurrence time and timezone', async () => {
+    const { methods } = makeMethods();
+    const enqueueTrigger = jest.fn<
+      ReturnType<ScheduleEngineDeps['enqueueTrigger']>,
+      Parameters<ScheduleEngineDeps['enqueueTrigger']>
+    >(async () => undefined);
+    await fireSchedule(
+      makeDeps(methods, { enqueueTrigger }),
+      makeSchedule({ prompt: 'Daily briefing {{current_date}}' }),
+      LIMITS,
+      new Date('2026-01-06T03:00:00.000Z'),
+    );
+    expect(enqueueTrigger.mock.calls[0][0].input).toBe('Daily briefing 2026-01-05 (Monday)');
+  });
+
   it('records a definite trigger admission rejection as an error', async () => {
     const { methods, calls } = makeMethods();
     const result = await fireSchedule(
