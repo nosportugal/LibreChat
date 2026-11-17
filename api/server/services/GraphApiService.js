@@ -1,5 +1,9 @@
 const client = require('openid-client');
-const { isEnabled } = require('@librechat/api');
+const {
+  isEnabled,
+  getTokenCacheTtlMs,
+  DEFAULT_OAUTH_TOKEN_TTL_SECONDS,
+} = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys } = require('librechat-data-provider');
 const { Client } = require('@microsoft/microsoft-graph-client');
@@ -90,7 +94,7 @@ const exchangeTokenForGraphAccess = async (config, accessToken, sub) => {
       {
         access_token: grantResponse.access_token,
       },
-      grantResponse.expires_in * 1000,
+      getTokenCacheTtlMs(grantResponse.expires_in, DEFAULT_OAUTH_TOKEN_TTL_SECONDS),
     );
 
     return grantResponse.access_token;
@@ -494,96 +498,6 @@ const searchGroups = async (graphClient, query, limit = 10) => {
 };
 
 /**
- * Test Graph API connectivity and permissions
- * @param {string} accessToken - OpenID Connect access token
- * @param {string} sub - Subject identifier
- * @returns {Promise<Object>} Test results with available permissions
- */
-const testGraphApiAccess = async (accessToken, sub) => {
-  try {
-    const graphClient = await createGraphClient(accessToken, sub);
-    const results = {
-      userAccess: false,
-      peopleAccess: false,
-      groupsAccess: false,
-      usersEndpointAccess: false,
-      groupsEndpointAccess: false,
-      errors: [],
-    };
-
-    // Test User.Read permission
-    try {
-      await graphClient.api('/me').select('id,displayName').get();
-      results.userAccess = true;
-    } catch (error) {
-      results.errors.push(`User.Read: ${error.message}`);
-    }
-
-    // Test People.Read permission with OrganizationUser filter
-    try {
-      await graphClient
-        .api('/me/people')
-        .filter("personType/subclass eq 'OrganizationUser'")
-        .top(1)
-        .get();
-      results.peopleAccess = true;
-    } catch (error) {
-      results.errors.push(`People.Read (OrganizationUser): ${error.message}`);
-    }
-
-    // Test People.Read permission with UnifiedGroup filter
-    try {
-      await graphClient
-        .api('/me/people')
-        .filter("personType/subclass eq 'UnifiedGroup'")
-        .top(1)
-        .get();
-      results.groupsAccess = true;
-    } catch (error) {
-      results.errors.push(`People.Read (UnifiedGroup): ${error.message}`);
-    }
-
-    // Test /users endpoint access (requires User.Read.All or similar)
-    try {
-      await graphClient
-        .api('/users')
-        .search('"displayName:test"')
-        .select('id,displayName,userPrincipalName')
-        .top(1)
-        .get();
-      results.usersEndpointAccess = true;
-    } catch (error) {
-      results.errors.push(`Users endpoint: ${error.message}`);
-    }
-
-    // Test /groups endpoint access (requires Group.Read.All or similar)
-    try {
-      await graphClient
-        .api('/groups')
-        .search('"displayName:test"')
-        .select('id,displayName,mail')
-        .top(1)
-        .get();
-      results.groupsEndpointAccess = true;
-    } catch (error) {
-      results.errors.push(`Groups endpoint: ${error.message}`);
-    }
-
-    return results;
-  } catch (error) {
-    logger.error('[testGraphApiAccess] Error testing Graph API access:', error);
-    return {
-      userAccess: false,
-      peopleAccess: false,
-      groupsAccess: false,
-      usersEndpointAccess: false,
-      groupsEndpointAccess: false,
-      errors: [error.message],
-    };
-  }
-};
-
-/**
  * Map Graph API user object to TPrincipalSearchResult format
  * @param {TGraphUser} user - Raw user object from Graph API
  * @returns {TPrincipalSearchResult} Mapped user result
@@ -645,7 +559,6 @@ module.exports = {
   getUserEntraGroups,
   getUserOwnedEntraGroups,
   getEntraGroupDetailsBatch,
-  testGraphApiAccess,
   searchEntraIdPrincipals,
   exchangeTokenForGraphAccess,
   entraIdPrincipalFeatureEnabled,

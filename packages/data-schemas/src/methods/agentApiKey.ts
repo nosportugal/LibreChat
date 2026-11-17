@@ -11,7 +11,22 @@ import logger from '~/config/winston';
 const API_KEY_PREFIX = 'sk-';
 const API_KEY_LENGTH = 32;
 
-export function createAgentApiKeyMethods(mongoose: typeof import('mongoose')) {
+export function createAgentApiKeyMethods(mongoose: typeof import('mongoose')): {
+  createAgentApiKey: (data: AgentApiKeyCreateData) => Promise<AgentApiKeyCreateResult>;
+  validateAgentApiKey: (
+    apiKey: string,
+  ) => Promise<{ userId: Types.ObjectId; keyId: Types.ObjectId } | null>;
+  listAgentApiKeys: (userId: string | Types.ObjectId) => Promise<AgentApiKeyListItem[]>;
+  deleteAgentApiKey: (
+    keyId: string | Types.ObjectId,
+    userId: string | Types.ObjectId,
+  ) => Promise<boolean>;
+  deleteAllAgentApiKeys: (userId: string | Types.ObjectId) => Promise<number>;
+  getAgentApiKeyById: (
+    keyId: string | Types.ObjectId,
+    userId: string | Types.ObjectId,
+  ) => Promise<AgentApiKeyListItem | null>;
+} {
   async function generateApiKey(): Promise<{ key: string; keyHash: string; keyPrefix: string }> {
     const randomPart = await getRandomValues(API_KEY_LENGTH);
     const key = `${API_KEY_PREFIX}${randomPart}`;
@@ -50,30 +65,29 @@ export function createAgentApiKeyMethods(mongoose: typeof import('mongoose')) {
   async function validateAgentApiKey(
     apiKey: string,
   ): Promise<{ userId: Types.ObjectId; keyId: Types.ObjectId } | null> {
-    try {
-      const AgentApiKey = mongoose.models.AgentApiKey;
-      const keyHash = await hashToken(apiKey);
+    const AgentApiKey = mongoose.models.AgentApiKey;
+    const keyHash = await hashToken(apiKey);
 
-      const keyDoc = (await AgentApiKey.findOne({ keyHash }).lean()) as IAgentApiKey | null;
+    const keyDoc = (await AgentApiKey.findOne({ keyHash }).lean()) as IAgentApiKey | null;
 
-      if (!keyDoc) {
-        return null;
-      }
-
-      if (keyDoc.expiresAt && new Date(keyDoc.expiresAt) < new Date()) {
-        return null;
-      }
-
-      await AgentApiKey.updateOne({ _id: keyDoc._id }, { $set: { lastUsedAt: new Date() } });
-
-      return {
-        userId: keyDoc.userId,
-        keyId: keyDoc._id as Types.ObjectId,
-      };
-    } catch (error) {
-      logger.error('[validateAgentApiKey] Error validating API key:', error);
+    if (!keyDoc) {
       return null;
     }
+
+    if (keyDoc.expiresAt && new Date(keyDoc.expiresAt) < new Date()) {
+      return null;
+    }
+
+    AgentApiKey.updateOne({ _id: keyDoc._id }, { $set: { lastUsedAt: new Date() } }).catch(
+      (error: unknown) => {
+        logger.error('[validateAgentApiKey] Error updating lastUsedAt:', error);
+      },
+    );
+
+    return {
+      userId: keyDoc.userId,
+      keyId: keyDoc._id as Types.ObjectId,
+    };
   }
 
   async function listAgentApiKeys(userId: string | Types.ObjectId): Promise<AgentApiKeyListItem[]> {

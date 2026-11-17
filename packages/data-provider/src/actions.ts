@@ -3,11 +3,11 @@ import { URL } from 'url';
 import _axios from 'axios';
 import crypto from 'crypto';
 import { load } from 'js-yaml';
-import type { ActionMetadata, ActionMetadataRuntime } from './types/agents';
-import type { FunctionTool, Schema, Reference } from './types/assistants';
-import { AuthTypeEnum, AuthorizationTypeEnum } from './types/agents';
 import type { OpenAPIV3 } from 'openapi-types';
-import { Tools } from './types/assistants';
+import type { ActionMetadata, ActionMetadataRuntime } from './types/agents';
+import type { FunctionTool, Schema, Reference } from './types/tools';
+import { AuthTypeEnum, AuthorizationTypeEnum } from './types/agents';
+import { Tools } from './types/tools';
 
 export type ParametersSchema = {
   type: string;
@@ -167,6 +167,26 @@ class RequestConfig {
   ) {}
 }
 
+/**
+ * The abort signal for one action call: `timeout` alone only fires on an idle socket, so a
+ * deadline signal caps the whole exchange, combined with the caller's own `signal`.
+ */
+function requestSignal(
+  timeout?: number,
+  signal?: AbortSignal,
+): { signal?: AbortSignal; timeoutErrorMessage?: string } {
+  if (timeout == null) {
+    return signal ? { signal } : {};
+  }
+  /** Same wording as `outboundTimeoutMessage` in `@librechat/api`, which recognizes it. */
+  const message = `Exceeded timeouts.actionsMs (${timeout} ms); raise it in librechat.yaml if this upstream is legitimately slow`;
+  const deadline = AbortSignal.timeout(timeout);
+  return {
+    signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+    timeoutErrorMessage: message,
+  };
+}
+
 class RequestExecutor {
   path: string;
   params?: Record<string, unknown>;
@@ -283,7 +303,14 @@ class RequestExecutor {
     return this;
   }
 
-  async execute(options?: { httpAgent?: unknown; httpsAgent?: unknown }) {
+  async execute(options?: {
+    httpAgent?: unknown;
+    httpsAgent?: unknown;
+    /** Milliseconds before the request is abandoned; unset waits indefinitely. */
+    timeout?: number;
+    /** Aborts the request, for example when the run that called the action is stopped. */
+    signal?: AbortSignal;
+  }) {
     const url = createURL(this.config.domain, this.path);
     const headers: Record<string, string> = {
       ...this.authHeaders,
@@ -309,6 +336,8 @@ class RequestExecutor {
       validateStatus: (status) => status >= 200 && status < 400,
       ...(options?.httpAgent != null ? { httpAgent: options.httpAgent } : {}),
       ...(options?.httpsAgent != null ? { httpsAgent: options.httpsAgent } : {}),
+      ...(options?.timeout != null ? { timeout: options.timeout } : {}),
+      ...requestSignal(options?.timeout, options?.signal),
     });
 
     // Initialize separate containers for query and body parameters.
@@ -636,6 +665,45 @@ export type DomainValidationResult = {
   normalizedClientDomain?: string;
 };
 
+function getExplicitPort(value: string): string | null {
+  const normalizedValue = value.trim();
+  const protocolSeparatorIndex = normalizedValue.indexOf('://');
+  const hasProtocol = protocolSeparatorIndex !== -1;
+  const authorityAndPath = hasProtocol
+    ? normalizedValue.slice(protocolSeparatorIndex + 3)
+    : normalizedValue;
+
+  let port: string;
+  try {
+    const parsedUrl = new URL(hasProtocol ? normalizedValue : `https://${normalizedValue}`);
+    port = parsedUrl.port;
+
+    // WHATWG URL parsing removes explicit default ports, so parse the same authority with
+    // the alternate HTTP scheme to distinguish an explicit port from an omitted one.
+    if (!port && (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:')) {
+      const alternateProtocol = parsedUrl.protocol === 'http:' ? 'https:' : 'http:';
+      port = new URL(`${alternateProtocol}//${authorityAndPath}`).port;
+    }
+  } catch {
+    return null;
+  }
+
+  if (!port) {
+    return null;
+  }
+
+  const parsedPort = Number(port);
+  if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+    throw new Error(`Invalid port in domain: ${value}`);
+  }
+
+  return String(parsedPort);
+}
+
+function getDefaultActionPort(protocol: string): string {
+  return protocol === 'https:' ? '443' : '80';
+}
+
 /**
  * Validates client domain matches OpenAPI spec server URL domain (SSRF prevention).
  * @param clientProvidedDomain - Domain from client (with/without protocol)
@@ -669,6 +737,7 @@ export function validateActionDomain(
     /** Extract hostname from client domain if it's a full URL */
     let clientHostname = clientProvidedDomain;
     let clientHasProtocol = false;
+    const clientExplicitPort = getExplicitPort(clientProvidedDomain);
 
     // Check for any protocol in the client domain
     if (clientProvidedDomain.includes('://')) {
@@ -689,6 +758,9 @@ export function validateActionDomain(
         // If parsing fails, treat as hostname
         clientHasProtocol = false;
       }
+    } else if (clientExplicitPort !== null) {
+      const clientUrl = new URL(`https://${clientProvidedDomain}`);
+      clientHostname = clientUrl.hostname;
     }
 
     /** Normalize IPv6 addresses by removing brackets for comparison */
@@ -718,20 +790,33 @@ export function validateActionDomain(
       }
     }
 
-    if (
+    const domainMatches =
       normalizedSpecDomain === normalizedClientDomain ||
-      (!clientHasProtocol && isIPAddress && normalizedClientHostname === normalizedSpecHostname)
-    ) {
+      (!clientHasProtocol && isIPAddress && normalizedClientHostname === normalizedSpecHostname);
+
+    if (!domainMatches) {
       return {
-        isValid: true,
+        isValid: false,
+        message: `Domain mismatch: Client provided '${clientProvidedDomain}', but spec uses '${specHostname}'`,
         normalizedSpecDomain,
         normalizedClientDomain,
       };
     }
 
+    if (clientExplicitPort !== null) {
+      const specEffectivePort = specUrl.port || getDefaultActionPort(specUrl.protocol);
+      if (clientExplicitPort !== specEffectivePort) {
+        return {
+          isValid: false,
+          message: `Port mismatch: Client provided '${clientProvidedDomain}', but spec uses effective port '${specEffectivePort}'`,
+          normalizedSpecDomain,
+          normalizedClientDomain,
+        };
+      }
+    }
+
     return {
-      isValid: false,
-      message: `Domain mismatch: Client provided '${clientProvidedDomain}', but spec uses '${specHostname}'`,
+      isValid: true,
       normalizedSpecDomain,
       normalizedClientDomain,
     };

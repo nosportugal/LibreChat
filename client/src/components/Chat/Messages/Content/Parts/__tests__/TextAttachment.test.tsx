@@ -1,6 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import type { TAttachment } from 'librechat-data-provider';
+
+let mockRemScale = 1;
+jest.mock('@librechat/client', () => ({
+  useRemScale: () => mockRemScale,
+}));
 import Attachment, { AttachmentGroup } from '../Attachment';
 
 jest.mock('~/hooks', () => ({
@@ -71,7 +76,6 @@ const textAttachment = (overrides: Partial<TAttachment> = {}): TAttachment =>
      * bearing, downloadable, expandable) without the panel coupling. */
     filename: 'output.json',
     filepath: '/files/output.json',
-    type: 'application/json',
     text: '{"a":1,"b":2,"c":3}',
     ...overrides,
   }) as TAttachment;
@@ -102,11 +106,13 @@ const restoreScrollHeight = () => {
 };
 
 afterAll(() => {
+  mockRemScale = 1;
   restoreScrollHeight();
 });
 
 describe('TextAttachment (via Attachment default export)', () => {
   beforeEach(() => {
+    mockRemScale = 1;
     mockHandleDownload.mockReset();
     setScrollHeight(0);
   });
@@ -153,6 +159,26 @@ describe('TextAttachment (via Attachment default export)', () => {
     expect(expanded).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('recalculates the text preview when the root scale changes', () => {
+    setScrollHeight(300);
+    mockRemScale = 1.5;
+    const { container, rerender } = render(<Attachment attachment={textAttachment()} />);
+    expect(screen.queryByRole('button', { name: 'Show all' })).not.toBeInTheDocument();
+
+    mockRemScale = 0.5;
+    rerender(<Attachment attachment={textAttachment()} />);
+    expect(screen.getByRole('button', { name: 'Show all' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(container.querySelector('pre')).toHaveStyle({ maxHeight: '160px' });
+
+    mockRemScale = 1.5;
+    rerender(<Attachment attachment={textAttachment()} />);
+    expect(screen.queryByRole('button', { name: 'Show all' })).not.toBeInTheDocument();
+    expect(container.querySelector('pre')?.style.maxHeight).toBe('');
+  });
+
   it('falls through to FileAttachment when text is missing', () => {
     const noText = textAttachment({ text: undefined as unknown as string });
     render(<Attachment attachment={noText} />);
@@ -172,6 +198,7 @@ describe('TextAttachment (via Attachment default export)', () => {
 
 describe('AttachmentGroup', () => {
   beforeEach(() => {
+    mockRemScale = 1;
     setScrollHeight(0);
   });
 
@@ -190,8 +217,7 @@ describe('AttachmentGroup', () => {
       textAttachment({
         file_id: 'b',
         filename: 'archive.zip',
-        type: 'application/zip',
-        text: undefined as unknown as string,
+        text: undefined,
       }),
     ] as TAttachment[];
     const { container } = render(<AttachmentGroup attachments={attachments} />);
@@ -205,8 +231,7 @@ describe('AttachmentGroup', () => {
         file_id: 'placeholder',
         filename: 'placeholder.zip',
         filepath: '',
-        type: 'application/zip',
-        text: undefined as unknown as string,
+        text: undefined,
       }),
       textAttachment({
         file_id: 'json',
@@ -230,8 +255,7 @@ describe('AttachmentGroup', () => {
       textAttachment({
         file_id: 'archive',
         filename: 'archive.zip',
-        type: 'application/zip',
-        text: undefined as unknown as string,
+        text: undefined,
       }),
       textAttachment({
         file_id: 'json',

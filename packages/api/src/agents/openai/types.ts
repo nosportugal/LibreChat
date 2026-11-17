@@ -80,6 +80,12 @@ export interface ChatCompletionRequest {
 /**
  * Token usage information
  */
+export interface CompletionUsageTotals {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface CompletionUsage {
   prompt_tokens: number;
   completion_tokens: number;
@@ -88,6 +94,10 @@ export interface CompletionUsage {
   completion_tokens_details?: {
     reasoning_tokens?: number;
   };
+  /** LibreChat extension for parent, handoff, and summarization model calls. */
+  primary?: CompletionUsageTotals;
+  /** LibreChat extension for isolated subagent child model calls. */
+  subagent?: CompletionUsageTotals;
 }
 
 /**
@@ -155,13 +165,6 @@ export interface ChatCompletionChunk {
 }
 
 /**
- * SSE event wrapper for streaming
- */
-export interface SSEEvent {
-  data: ChatCompletionChunk | '[DONE]';
-}
-
-/**
  * Context for building OpenAI responses
  */
 export interface OpenAIResponseContext {
@@ -171,14 +174,6 @@ export interface OpenAIResponseContext {
   model: string;
   /** Created timestamp */
   created: number;
-}
-
-/**
- * Aggregated content for building final response
- */
-export interface AggregatedContent {
-  text: string;
-  toolCalls: ToolCall[];
 }
 
 /**

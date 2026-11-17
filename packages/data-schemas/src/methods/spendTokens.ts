@@ -1,5 +1,5 @@
-import logger from '~/config/winston';
 import type { TxData, TransactionResult } from './transaction';
+import logger from '~/config/winston';
 
 /** Base transaction context passed by callers — does not include fields added internally */
 export interface SpendTxData {
@@ -19,14 +19,29 @@ export function createSpendTokensMethods(
     createTransaction: (txData: TxData) => Promise<TransactionResult | undefined>;
     createStructuredTransaction: (txData: TxData) => Promise<TransactionResult | undefined>;
   },
-) {
+): {
+  spendTokens: (
+    txData: SpendTxData,
+    tokenUsage: { promptTokens?: number; completionTokens?: number },
+  ) => Promise<void>;
+  spendStructuredTokens: (
+    txData: SpendTxData,
+    tokenUsage: {
+      promptTokens?: { input?: number; write?: number; write1h?: number; read?: number };
+      completionTokens?: number;
+    },
+  ) => Promise<{
+    prompt: TransactionResult | undefined;
+    completion: TransactionResult | undefined;
+  }>;
+} {
   /**
    * Creates up to two transactions to record the spending of tokens.
    */
   async function spendTokens(
     txData: SpendTxData,
     tokenUsage: { promptTokens?: number; completionTokens?: number },
-  ) {
+  ): Promise<void> {
     const { promptTokens, completionTokens } = tokenUsage;
     logger.debug(
       `[spendTokens] conversationId: ${txData.conversationId}${
@@ -78,10 +93,13 @@ export function createSpendTokensMethods(
   async function spendStructuredTokens(
     txData: SpendTxData,
     tokenUsage: {
-      promptTokens?: { input?: number; write?: number; read?: number };
+      promptTokens?: { input?: number; write?: number; write1h?: number; read?: number };
       completionTokens?: number;
     },
-  ) {
+  ): Promise<{
+    prompt: TransactionResult | undefined;
+    completion: TransactionResult | undefined;
+  }> {
     const { promptTokens, completionTokens } = tokenUsage;
     logger.debug(
       `[spendStructuredTokens] conversationId: ${txData.conversationId}${
@@ -94,6 +112,7 @@ export function createSpendTokensMethods(
       if (promptTokens) {
         const input = Math.max(promptTokens.input ?? 0, 0);
         const write = Math.max(promptTokens.write ?? 0, 0);
+        const write1h = Math.min(Math.max(promptTokens.write1h ?? 0, 0), write);
         const read = Math.max(promptTokens.read ?? 0, 0);
         const totalInputTokens = input + write + read;
         prompt = await transactionMethods.createStructuredTransaction({
@@ -101,6 +120,7 @@ export function createSpendTokensMethods(
           tokenType: 'prompt',
           inputTokens: -input,
           writeTokens: -write,
+          ...(write1h > 0 && { write1hTokens: -write1h }),
           readTokens: -read,
           inputTokenCount: totalInputTokens,
         });

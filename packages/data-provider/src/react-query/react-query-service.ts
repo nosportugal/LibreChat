@@ -4,17 +4,17 @@ import type {
   UseMutationResult,
   QueryObserverResult,
 } from '@tanstack/react-query';
+import type { MCPReinitializeResponse } from '../types/mcpServers';
 import { Constants, initialModelsConfig } from '../config';
 import { defaultOrderQuery } from '../types/assistants';
-import { MCPServerConnectionStatusResponse } from '../types/queries';
+import * as permissions from '../accessPermissions';
+import { ResourceType } from '../accessPermissions';
 import * as dataService from '../data-service';
 import * as m from '../types/mutations';
 import * as q from '../types/queries';
 import { QueryKeys } from '../keys';
 import * as s from '../schemas';
 import * as t from '../types';
-import * as permissions from '../accessPermissions';
-import { ResourceType } from '../accessPermissions';
 
 export { hasPermissions } from '../accessPermissions';
 
@@ -74,18 +74,6 @@ export const useGetConversationByIdQuery = (
   );
 };
 
-//This isn't ideal because its just a query and we're using mutation, but it was the only way
-//to make it work with how the Chat component is structured
-export const useGetConversationByIdMutation = (id: string): UseMutationResult<s.TConversation> => {
-  const queryClient = useQueryClient();
-  return useMutation(() => dataService.getConversationById(id), {
-    // onSuccess: (res: s.TConversation) => {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.conversation, id]);
-    },
-  });
-};
-
 export const useUpdateMessageMutation = (
   id: string,
 ): UseMutationResult<unknown, unknown, t.TUpdateMessageRequest, unknown> => {
@@ -122,6 +110,8 @@ export const useUpdateUserKeysMutation = (): UseMutationResult<
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries([QueryKeys.name, variables.name]);
       queryClient.invalidateQueries([QueryKeys.models]);
+      /** token-config is derived from the same per-user model fetch */
+      queryClient.invalidateQueries([QueryKeys.tokenConfig]);
     },
   });
 };
@@ -131,6 +121,8 @@ export const useClearConversationsMutation = (): UseMutationResult<unknown> => {
   return useMutation(() => dataService.clearAllConversations(), {
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.allConversations]);
+      queryClient.invalidateQueries([QueryKeys.pinnedConversations]);
+      queryClient.invalidateQueries([QueryKeys.conversationTags]);
     },
   });
 };
@@ -141,6 +133,7 @@ export const useRevokeUserKeyMutation = (name: string): UseMutationResult<unknow
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.name, name]);
       queryClient.invalidateQueries([QueryKeys.models]);
+      queryClient.invalidateQueries([QueryKeys.tokenConfig]);
       if (s.isAssistantsEndpoint(name)) {
         queryClient.invalidateQueries([QueryKeys.assistants, name, defaultOrderQuery]);
         queryClient.invalidateQueries([QueryKeys.assistantDocs]);
@@ -159,6 +152,7 @@ export const useRevokeAllUserKeysMutation = (): UseMutationResult<unknown> => {
   return useMutation(() => dataService.revokeAllUserKeys(), {
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.name]);
+      queryClient.invalidateQueries([QueryKeys.tokenConfig]);
       queryClient.invalidateQueries([
         QueryKeys.assistants,
         s.EModelEndpoint.assistants,
@@ -217,20 +211,6 @@ export const useDeletePresetMutation = (): UseMutationResult<
   return useMutation((payload: s.TPreset | undefined) => dataService.deletePreset(payload), {
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.presets]);
-    },
-  });
-};
-
-export const useUpdateTokenCountMutation = (): UseMutationResult<
-  t.TUpdateTokenCountResponse,
-  unknown,
-  { text: string },
-  unknown
-> => {
-  const queryClient = useQueryClient();
-  return useMutation(({ text }: { text: string }) => dataService.updateTokenCount(text), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.tokenCount]);
     },
   });
 };
@@ -295,21 +275,6 @@ export const useResetPasswordMutation = (): UseMutationResult<
   return useMutation((payload: t.TResetPassword) => dataService.resetPassword(payload));
 };
 
-export const useAvailablePluginsQuery = <TData = s.TPlugin[]>(
-  config?: UseQueryOptions<s.TPlugin[], unknown, TData>,
-): QueryObserverResult<TData> => {
-  return useQuery<s.TPlugin[], unknown, TData>(
-    [QueryKeys.availablePlugins],
-    () => dataService.getAvailablePlugins(),
-    {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      ...config,
-    },
-  );
-};
-
 export const useUpdateUserPluginsMutation = (
   _options?: m.UpdatePluginAuthOptions,
 ): UseMutationResult<t.TUser, unknown, t.TUpdateUserPlugins, unknown> => {
@@ -329,13 +294,7 @@ export const useUpdateUserPluginsMutation = (
 };
 
 export const useReinitializeMCPServerMutation = (): UseMutationResult<
-  {
-    success: boolean;
-    message: string;
-    serverName: string;
-    oauthRequired?: boolean;
-    oauthUrl?: string;
-  },
+  MCPReinitializeResponse,
   unknown,
   string,
   unknown
@@ -474,6 +433,10 @@ export const useUpdateResourcePermissionsMutation = (): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: [QueryKeys.effectivePermissions, variables.resourceType, variables.resourceId],
       });
+
+      queryClient.invalidateQueries({
+        queryKey: [QueryKeys.effectivePermissions, 'all', variables.resourceType],
+      });
     },
   });
 };
@@ -505,24 +468,6 @@ export const useGetAllEffectivePermissionsQuery = (
     staleTime: 30000,
     ...config,
   });
-};
-
-export const useMCPServerConnectionStatusQuery = (
-  serverName: string,
-  config?: UseQueryOptions<MCPServerConnectionStatusResponse>,
-): QueryObserverResult<MCPServerConnectionStatusResponse> => {
-  return useQuery<MCPServerConnectionStatusResponse>(
-    [QueryKeys.mcpConnectionStatus, serverName],
-    () => dataService.getMCPServerConnectionStatus(serverName),
-    {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      staleTime: 10000, // 10 seconds
-      enabled: !!serverName,
-      ...config,
-    },
-  );
 };
 
 export const useGetAgentApiKeysQuery = (

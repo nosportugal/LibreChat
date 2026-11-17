@@ -11,7 +11,7 @@ jest.mock('librechat-data-provider', () => {
     paramSettings: {
       foo: {},
       bar: {},
-      custom: {},
+      custom: [],
       openrouter: [
         {
           key: 'promptCache',
@@ -57,8 +57,9 @@ jest.mock('@librechat/data-schemas', () => {
 });
 
 const axios = require('axios');
-const { loadYaml } = require('@librechat/api');
+const { loadYaml, expandCustomEndpoint } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
+const { ReasoningParameterFormat, ReasoningResponseKey } = require('librechat-data-provider');
 const loadCustomConfig = require('./loadCustomConfig');
 
 describe('loadCustomConfig', () => {
@@ -144,6 +145,57 @@ describe('loadCustomConfig', () => {
     expect(logger.error).toHaveBeenCalledWith(
       'Exiting due to invalid configuration. Set CONFIG_BYPASS_VALIDATION=true to bypass this check.',
     );
+  });
+
+  it('does not exit when config validation fails during reload', async () => {
+    process.env.CONFIG_PATH = 'invalidConfig.yaml';
+    loadYaml.mockReturnValueOnce({ invalidField: true });
+
+    await expect(loadCustomConfig(true, { mode: 'reload' })).rejects.toMatchObject({
+      name: 'ConfigReloadError',
+      validationErrors: expect.any(Array),
+    });
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reload when the local config file is missing', async () => {
+    process.env.CONFIG_PATH = 'missingConfig.yaml';
+    loadYaml.mockReturnValueOnce(null);
+
+    await expect(loadCustomConfig(true, { mode: 'reload' })).rejects.toMatchObject({
+      name: 'ConfigReloadError',
+    });
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed local YAML during reload without exiting', async () => {
+    process.env.CONFIG_PATH = 'invalidConfig.yaml';
+    loadYaml.mockReturnValueOnce(new Error('Malformed YAML'));
+
+    await expect(loadCustomConfig(true, { mode: 'reload' })).rejects.toMatchObject({
+      name: 'ConfigReloadError',
+    });
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed remote YAML during reload without exiting', async () => {
+    process.env.CONFIG_PATH = 'https://example.com/config.yaml';
+    axios.get.mockResolvedValueOnce({ data: 'version: [unterminated' });
+
+    await expect(loadCustomConfig(true, { mode: 'reload' })).rejects.toMatchObject({
+      name: 'ConfigReloadError',
+    });
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reload when the remote config fetch fails', async () => {
+    process.env.CONFIG_PATH = 'https://example.com/config.yaml';
+    axios.get.mockRejectedValueOnce(new Error('Network error'));
+
+    await expect(loadCustomConfig(true, { mode: 'reload' })).rejects.toMatchObject({
+      name: 'ConfigReloadError',
+    });
+    expect(mockExit).not.toHaveBeenCalled();
   });
 
   it('should handle and return null on YAML parse error for a string response from remote', async () => {
@@ -233,7 +285,39 @@ describe('loadCustomConfig', () => {
     expect(logger.debug).toHaveBeenCalledWith('Custom config:', mockConfig);
   });
 
-  describe('parseCustomParams', () => {
+  it('masks literal Langfuse header credentials in the startup log', async () => {
+    const mockConfig = {
+      version: '1.0',
+      cache: true,
+      langfuse: {
+        enabled: true,
+        publicKey: 'pk-lf-1',
+        headers: {
+          'CF-Access-Client-Id': 'client-id',
+          'CF-Access-Client-Secret': 'gateway-credential',
+        },
+      },
+    };
+    process.env.CONFIG_PATH = 'validConfig.yaml';
+    loadYaml.mockReturnValueOnce(mockConfig);
+
+    const result = await loadCustomConfig();
+
+    const logged = logger.info.mock.calls.map(([value]) => value).join('\n');
+    const debugged = JSON.stringify(logger.debug.mock.calls);
+    expect(logged).not.toContain('gateway-credential');
+    expect(debugged).not.toContain('gateway-credential');
+    expect(logged).toContain('***');
+    // The masking is for logging only — the live config keeps real values.
+    expect(result.langfuse.headers['CF-Access-Client-Secret']).toBe('gateway-credential');
+  });
+
+  /**
+   * The loader checks each custom endpoint's `customParams` and returns them as written; the
+   * served copy is expanded by `expandCustomEndpoint` (AppService), so `appConfig.config` stays
+   * librechat.yaml as written.
+   */
+  describe('customParams', () => {
     const mockConfig = {
       version: '1.0',
       cache: false,
@@ -307,11 +391,34 @@ describe('loadCustomConfig', () => {
       );
     });
 
-    it('throws an error when defaultParamsEndpoint is not provided', async () => {
-      const malformedCustomParams = { defaultParamsEndpoint: undefined };
-      await expect(loadCustomParams(malformedCustomParams)).rejects.toThrow(
-        'defaultParamsEndpoint of "Google" endpoint is invalid. Valid options are foo, bar, custom, openrouter, google',
-      );
+    it('defaults defaultParamsEndpoint when only reasoningFormat is provided', async () => {
+      const parsedConfig = await loadCustomParams({
+        reasoningFormat: ReasoningParameterFormat.reasoningObject,
+      });
+
+      expect(parsedConfig.endpoints.custom[0].customParams).toEqual({
+        reasoningFormat: ReasoningParameterFormat.reasoningObject,
+      });
+      expect(expandCustomEndpoint(parsedConfig.endpoints.custom[0]).customParams).toEqual({
+        defaultParamsEndpoint: 'custom',
+        reasoningFormat: ReasoningParameterFormat.reasoningObject,
+        paramDefinitions: [],
+      });
+    });
+
+    it('defaults defaultParamsEndpoint when only reasoningKey is provided', async () => {
+      const parsedConfig = await loadCustomParams({
+        reasoningKey: ReasoningResponseKey.reasoning,
+      });
+
+      expect(parsedConfig.endpoints.custom[0].customParams).toEqual({
+        reasoningKey: ReasoningResponseKey.reasoning,
+      });
+      expect(expandCustomEndpoint(parsedConfig.endpoints.custom[0]).customParams).toEqual({
+        defaultParamsEndpoint: 'custom',
+        reasoningKey: ReasoningResponseKey.reasoning,
+        paramDefinitions: [],
+      });
     });
 
     it('fills the paramDefinitions with missing values', async () => {
@@ -323,8 +430,11 @@ describe('loadCustomConfig', () => {
         ],
       };
 
+      const written = structuredClone(customParams);
       const parsedConfig = await loadCustomParams(customParams);
-      const paramDefinitions = parsedConfig.endpoints.custom[0].customParams.paramDefinitions;
+      expect(parsedConfig.endpoints.custom[0].customParams).toEqual(written);
+      const paramDefinitions = expandCustomEndpoint(parsedConfig.endpoints.custom[0]).customParams
+        .paramDefinitions;
       expect(paramDefinitions).toEqual([
         {
           columnSpan: 1,
@@ -374,7 +484,8 @@ describe('loadCustomConfig', () => {
       loadYaml.mockReturnValue(openRouterConfig);
 
       const parsedConfig = await loadCustomConfig();
-      expect(parsedConfig.endpoints.custom[0].customParams).toEqual({
+      expect(parsedConfig.endpoints.custom[0].customParams).toBeUndefined();
+      expect(expandCustomEndpoint(parsedConfig.endpoints.custom[0]).customParams).toEqual({
         defaultParamsEndpoint: 'openrouter',
         paramDefinitions: [
           {
@@ -410,7 +521,8 @@ describe('loadCustomConfig', () => {
       loadYaml.mockReturnValue(openRouterConfig);
 
       const parsedConfig = await loadCustomConfig();
-      expect(parsedConfig.endpoints.custom[0].customParams).toMatchObject({
+      expect(parsedConfig.endpoints.custom[0].customParams).toBeUndefined();
+      expect(expandCustomEndpoint(parsedConfig.endpoints.custom[0]).customParams).toMatchObject({
         defaultParamsEndpoint: 'openrouter',
         paramDefinitions: [
           {
@@ -419,6 +531,30 @@ describe('loadCustomConfig', () => {
           },
         ],
       });
+    });
+
+    it('treats an empty defaultParamsEndpoint as absent for OpenRouter', async () => {
+      const config = {
+        version: '1.0',
+        endpoints: {
+          custom: [
+            {
+              name: 'OpenRouter',
+              apiKey: 'user_provided',
+              baseURL: 'https://openrouter.ai/api/v1',
+              models: { default: ['test-model'] },
+              customParams: { defaultParamsEndpoint: '' },
+            },
+          ],
+        },
+      };
+      loadYaml.mockReturnValueOnce(config);
+
+      const loaded = await loadCustomConfig();
+      expect(loaded.endpoints.custom[0].customParams.defaultParamsEndpoint).toBe('');
+      expect(
+        expandCustomEndpoint(loaded.endpoints.custom[0]).customParams.defaultParamsEndpoint,
+      ).toBe('openrouter');
     });
 
     it('preserves explicit OpenRouter promptCache defaults', async () => {
@@ -446,6 +582,11 @@ describe('loadCustomConfig', () => {
 
       const parsedConfig = await loadCustomConfig();
       expect(parsedConfig.endpoints.custom[0].customParams.paramDefinitions).toEqual([
+        { key: 'promptCache', default: false },
+      ]);
+      expect(
+        expandCustomEndpoint(parsedConfig.endpoints.custom[0]).customParams.paramDefinitions,
+      ).toEqual([
         {
           columnSpan: 1,
           component: 'switch',

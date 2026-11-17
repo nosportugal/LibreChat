@@ -4,9 +4,26 @@ import supersub from 'remark-supersub';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import type { PluggableList } from 'unified';
-import { code, codeNoExecution, a, p } from './MarkdownComponents';
+import {
+  code,
+  codeNoExecution,
+  a,
+  p,
+  img,
+  table,
+  ul,
+  ol,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  blockquote,
+} from './MarkdownComponents';
+import { langSubset, remarkApproxTilde } from '~/utils';
+import { reportBoundaryError } from '~/lib/rum/logs';
 import { CodeBlockProvider } from '~/Providers';
-import { langSubset } from '~/utils';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -34,6 +51,7 @@ class MarkdownErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('Markdown rendering error:', error, errorInfo);
+    reportBoundaryError('markdown', error);
   }
 
   componentDidUpdate(prevProps: MarkdownErrorBoundaryProps) {
@@ -61,6 +79,7 @@ class MarkdownErrorBoundary extends React.Component<
         <CodeBlockProvider>
           <ReactMarkdown
             remarkPlugins={[
+              remarkApproxTilde,
               /** @ts-ignore */
               supersub,
               remarkGfm,
@@ -72,6 +91,20 @@ class MarkdownErrorBoundary extends React.Component<
                 code: codeExecution ? code : codeNoExecution,
                 a,
                 p,
+                /** The recovery path is exactly where a generated reference
+                 *  must still resolve; the default `img` would send
+                 *  `![chart](chart.png)` to a page-relative URL. */
+                img,
+                table,
+                ul,
+                ol,
+                h1,
+                h2,
+                h3,
+                h4,
+                h5,
+                h6,
+                blockquote,
               } as {
                 [nodeType: string]: React.ElementType;
               }

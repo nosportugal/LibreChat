@@ -1,3 +1,22 @@
+import { maxWorkers, workerIdleMemoryLimit } from '../../config/jest.workers.cjs';
+
+const esModules = [
+  '@librechat/code',
+  '@langchain/langgraph',
+  '@langchain/langgraph-checkpoint',
+  '@langchain/langgraph-sdk',
+  '@mistralai/mistralai',
+  '@modelcontextprotocol/ext-apps',
+  'domelementtype',
+  'domhandler',
+  'dom-serializer',
+  'domutils',
+  'entities',
+  'htmlparser2',
+  'sanitize-html',
+  'uuid',
+].join('|');
+
 export default {
   collectCoverageFrom: ['src/**/*.{js,jsx,ts,tsx}', '!<rootDir>/node_modules/'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
@@ -23,8 +42,10 @@ export default {
       },
     ],
   },
+  transformIgnorePatterns: [`/node_modules/(?!(${esModules})/).*/`],
   moduleNameMapper: {
     '^@src/(.*)$': '<rootDir>/src/$1',
+    '^~/api/(.*)$': '<rootDir>/../../api/$1',
     '~/(.*)': '<rootDir>/src/$1',
   },
   // coverageThreshold: {
@@ -35,8 +56,9 @@ export default {
   //     lines: 57,
   //   },
   // },
-  setupFiles: ['<rootDir>/jest.setup.cjs'],
-  maxWorkers: '50%',
+  setupFiles: ['<rootDir>/jest.setup.cjs', '<rootDir>/../../config/jest.setup.logging.cjs'],
+  maxWorkers,
+  workerIdleMemoryLimit,
   restoreMocks: true,
   testTimeout: 15000,
 };

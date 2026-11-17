@@ -1,9 +1,17 @@
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import {
+  PrincipalType,
+  PrincipalModel,
+  ResourceType,
+  PermissionBits,
+} from 'librechat-data-provider';
 import type { MCPOptions } from 'librechat-data-provider';
 import type * as t from '~/types';
 import { createMCPServerMethods } from './mcpServer';
+import { createAclEntryMethods } from './aclEntry';
 import mcpServerSchema from '~/schema/mcpServer';
+import aclEntrySchema from '~/schema/aclEntry';
 
 let mongoServer: MongoMemoryServer;
 let MCPServer: mongoose.Model<t.MCPServerDocument>;
@@ -13,7 +21,12 @@ beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
   MCPServer = mongoose.models.MCPServer || mongoose.model('MCPServer', mcpServerSchema);
-  methods = createMCPServerMethods(mongoose);
+  if (!mongoose.models.AclEntry) {
+    mongoose.model('AclEntry', aclEntrySchema);
+  }
+  methods = createMCPServerMethods(mongoose, {
+    getSoleOwnedResourceIds: createAclEntryMethods(mongoose).getSoleOwnedResourceIds,
+  });
   await mongoose.connect(mongoUri);
 });
 
@@ -139,6 +152,37 @@ describe('MCPServer Model Tests', () => {
       });
 
       expect(server.serverName).toBe('test-server-2');
+    });
+
+    test('should append suffix when base name is reserved', async () => {
+      const server = await methods.createMCPServer({
+        config: createSSEConfig('Test Server'),
+        author: authorId,
+        reservedServerNames: ['test-server'],
+      });
+
+      expect(server.serverName).toBe('test-server-2');
+    });
+
+    test('should skip both DB and reserved names when finding next suffix', async () => {
+      await MCPServer.create({
+        serverName: 'test-server',
+        config: createSSEConfig('Test Server'),
+        author: authorId,
+      });
+      await MCPServer.create({
+        serverName: 'test-server-2',
+        config: createSSEConfig('Test Server'),
+        author: authorId,
+      });
+
+      const server = await methods.createMCPServer({
+        config: createSSEConfig('Test Server'),
+        author: authorId,
+        reservedServerNames: ['test-server-3'],
+      });
+
+      expect(server.serverName).toBe('test-server-4');
     });
 
     test('should find next available number in sequence', async () => {
@@ -298,69 +342,6 @@ describe('MCPServer Model Tests', () => {
 
     test('should return null for invalid ObjectId string', async () => {
       await expect(methods.findMCPServerByObjectId('invalid-id')).rejects.toThrow();
-    });
-  });
-
-  describe('findMCPServersByAuthor', () => {
-    test('should find all servers by author', async () => {
-      await methods.createMCPServer({
-        config: createSSEConfig('Author Server 1'),
-        author: authorId,
-      });
-      await methods.createMCPServer({
-        config: createSSEConfig('Author Server 2'),
-        author: authorId,
-      });
-      await methods.createMCPServer({
-        config: createSSEConfig('Other Author Server'),
-        author: authorId2,
-      });
-
-      const servers = await methods.findMCPServersByAuthor(authorId);
-
-      expect(servers).toHaveLength(2);
-      expect(servers.every((s) => s.author.toString() === authorId.toString())).toBe(true);
-    });
-
-    test('should return empty array when author has no servers', async () => {
-      const servers = await methods.findMCPServersByAuthor(new mongoose.Types.ObjectId());
-
-      expect(servers).toEqual([]);
-    });
-
-    test('should sort by updatedAt descending', async () => {
-      // Create servers with slight delay to ensure different timestamps
-      const server1 = await methods.createMCPServer({
-        config: createSSEConfig('First Created'),
-        author: authorId,
-      });
-
-      // Update first server to make it most recently updated
-      await MCPServer.findByIdAndUpdate(server1._id, {
-        $set: { 'config.description': 'Updated' },
-      });
-
-      await methods.createMCPServer({
-        config: createSSEConfig('Second Created'),
-        author: authorId,
-      });
-
-      const servers = await methods.findMCPServersByAuthor(authorId);
-
-      expect(servers).toHaveLength(2);
-      // Most recently updated should come first
-      expect(servers[0].serverName).toBe('second-created');
-    });
-
-    test('should handle string author ID', async () => {
-      await methods.createMCPServer({
-        config: createSSEConfig('String Author Server'),
-        author: authorId,
-      });
-
-      const servers = await methods.findMCPServersByAuthor(authorId.toString());
-
-      expect(servers).toHaveLength(1);
     });
   });
 
@@ -640,6 +621,41 @@ describe('MCPServer Model Tests', () => {
       const deleted = await methods.deleteMCPServer(created.serverName);
 
       expect(deleted?.config.description).toBe('Will be deleted');
+    });
+  });
+
+  describe('deleteMCPServersWithAcl', () => {
+    test('keeps the owner ACL until the server is gone so a failed delete can be retried', async () => {
+      const ownerId = new mongoose.Types.ObjectId();
+      const created = await methods.createMCPServer({
+        config: createSSEConfig('Erase Retry'),
+        author: authorId,
+      });
+      await mongoose.model('AclEntry').create({
+        principalType: PrincipalType.USER,
+        principalId: ownerId,
+        principalModel: PrincipalModel.USER,
+        resourceType: ResourceType.MCPSERVER,
+        resourceId: created._id,
+        permBits:
+          PermissionBits.VIEW | PermissionBits.EDIT | PermissionBits.DELETE | PermissionBits.SHARE,
+        grantedBy: ownerId,
+      });
+
+      const failure = jest
+        .spyOn(MCPServer, 'deleteMany')
+        .mockRejectedValueOnce(new Error('transient outage'));
+      await expect(methods.deleteMCPServersWithAcl([created._id.toString()])).rejects.toThrow(
+        'transient outage',
+      );
+      failure.mockRestore();
+
+      const found = await methods.findUserErasableMCPServers(ownerId.toString());
+      expect(found.map((s) => s.id)).toEqual([created._id.toString()]);
+
+      await methods.deleteMCPServersWithAcl(found.map((s) => s.id));
+      expect(await methods.findMCPServerByServerName(created.serverName)).toBeNull();
+      expect(await methods.findUserErasableMCPServers(ownerId.toString())).toEqual([]);
     });
   });
 
